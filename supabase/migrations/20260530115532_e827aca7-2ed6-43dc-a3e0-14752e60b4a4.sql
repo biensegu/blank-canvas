@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.add_points(UUID, INT) FROM PUBLIC, anon, authenticated;
