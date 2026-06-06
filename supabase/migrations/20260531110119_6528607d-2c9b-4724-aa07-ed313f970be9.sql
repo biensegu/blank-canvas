@@ -200,32 +200,3 @@ INSERT INTO public.roulette_items (slot_index, kind, title, weight, payload) VAL
   (5, 'chest',    'Cofre 3',    6,  '{"options":[]}'::jsonb),
   (6, 'surprise', 'Sorpresa 4', 10, '{}'::jsonb),
   (7, 'tutoring', 'Tutoría individualizada', 1, '{}'::jsonb);
-
--- ============ ADMIN ACCOUNTS ============
--- Create 3 admin users in auth.users with bcrypt-hashed passwords
-DO $$
-DECLARE
-  uid1 UUID := gen_random_uuid();
-  uid2 UUID := gen_random_uuid();
-  uid3 UUID := gen_random_uuid();
-BEGIN
-  INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token, email_change_token_new, email_change)
-  VALUES
-    ('00000000-0000-0000-0000-000000000000', uid1, 'authenticated', 'authenticated', 'admin1@piezaapieza.local', crypt('Manuel-021269', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Admin 1"}', now(), now(), '', '', '', ''),
-    ('00000000-0000-0000-0000-000000000000', uid2, 'authenticated', 'authenticated', 'admin2@piezaapieza.local', crypt('Mariloli-111113', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Admin 2"}', now(), now(), '', '', '', ''),
-    ('00000000-0000-0000-0000-000000000000', uid3, 'authenticated', 'authenticated', 'admin3@piezaapieza.local', crypt('Conchita-1268', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Admin 3"}', now(), now(), '', '', '', '');
-
-  INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
-  VALUES
-    (gen_random_uuid(), uid1, jsonb_build_object('sub', uid1::text, 'email', 'admin1@piezaapieza.local', 'email_verified', true), 'email', uid1::text, now(), now(), now()),
-    (gen_random_uuid(), uid2, jsonb_build_object('sub', uid2::text, 'email', 'admin2@piezaapieza.local', 'email_verified', true), 'email', uid2::text, now(), now(), now()),
-    (gen_random_uuid(), uid3, jsonb_build_object('sub', uid3::text, 'email', 'admin3@piezaapieza.local', 'email_verified', true), 'email', uid3::text, now(), now(), now());
-
-  -- Profiles (trigger handle_new_user should create them, but force them just in case)
-  INSERT INTO public.profiles (id, full_name) VALUES
-    (uid1, 'Admin 1'), (uid2, 'Admin 2'), (uid3, 'Admin 3')
-  ON CONFLICT (id) DO NOTHING;
-
-  INSERT INTO public.user_roles (user_id, role) VALUES
-    (uid1, 'admin'), (uid2, 'admin'), (uid3, 'admin');
-END $$;
