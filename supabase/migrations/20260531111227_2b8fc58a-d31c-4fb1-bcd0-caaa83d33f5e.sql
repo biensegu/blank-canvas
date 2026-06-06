@@ -99,9 +99,3 @@ SELECT * FROM (VALUES
   (7, 'chest', 'Cofre: Audio resumen o ficha imprimible', '{"options":[{"label":"Audio resumen","value":"audio"},{"label":"Ficha imprimible","value":"ficha"}]}'::jsonb, 6)
 ) AS v(slot_index, kind, title, payload, weight)
 WHERE NOT EXISTS (SELECT 1 FROM public.roulette_items);
-
--- Make sure existing admin users have role (idempotent)
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'admin'::app_role FROM auth.users
-WHERE email IN ('admin1@piezaapieza.local','admin2@piezaapieza.local','admin3@piezaapieza.local')
-ON CONFLICT DO NOTHING;

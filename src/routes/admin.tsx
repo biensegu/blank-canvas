@@ -33,16 +33,6 @@ export const Route = createFileRoute("/admin")({
               </Link>
             ))}
           </div>
-
-          <div className="mt-10 rounded-2xl border bg-muted/40 p-6">
-            <h3 className="font-bold">Cuentas de administrador creadas</h3>
-            <ul className="mt-2 text-sm space-y-1 font-mono">
-              <li>admin1@piezaapieza.local · Manuel-021269</li>
-              <li>admin2@piezaapieza.local · Mariloli-111113</li>
-              <li>admin3@piezaapieza.local · Conchita-1268</li>
-            </ul>
-            <p className="text-xs text-muted-foreground mt-3">Usa estos correos para iniciar sesión desde la pantalla de Entrar.</p>
-          </div>
         </main>
       </div>
     </RequireAdmin>

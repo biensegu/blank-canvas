@@ -4,6 +4,7 @@ import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 type Body = { messages?: unknown; scope?: unknown };
+type AuthResult = { userId: string } | Response;
 
 const HOME_PROMPT = `Eres Piezin, el asistente con IA de la plataforma Pieza a Pieza, dedicada a las oposiciones de Enseñanzas Medias — especialidad de Orientación Educativa en Castilla-La Mancha.
 
@@ -35,13 +36,48 @@ DATOS DEL CURSO:
 - Precio: ${course.price_cents === 0 ? "gratis" : `${(course.price_cents / 100).toFixed(0)} €`}`;
 }
 
+async function requireAuthenticatedUser(request: Request): Promise<AuthResult> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+  if (!token) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data.user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("blocked")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  if (profile?.blocked) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  return { userId: data.user.id };
+}
+
 export const Route = createFileRoute("/api/piezin")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const auth = await requireAuthenticatedUser(request);
+        if (auth instanceof Response) return auth;
+
         const { messages, scope } = (await request.json()) as Body;
         if (!Array.isArray(messages)) {
           return new Response("messages required", { status: 400 });
+        }
+        if (messages.length > 30) {
+          return new Response("too many messages", { status: 400 });
         }
         const scopeStr = typeof scope === "string" ? scope : "home";
 

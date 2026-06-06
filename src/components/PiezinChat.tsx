@@ -4,6 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { Bot, Send, X, MessageCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import ReactMarkdown from "react-markdown";
+import { supabase } from "@/integrations/supabase/client";
 
 export function PiezinChat({ scope = "home", title }: { scope?: string; title?: string }) {
   const [open, setOpen] = useState(false);
@@ -19,9 +20,14 @@ export function PiezinChat({ scope = "home", title }: { scope?: string; title?: 
     messages: initial,
     transport: new DefaultChatTransport({
       api: "/api/piezin",
-      prepareSendMessagesRequest: ({ messages, id }) => ({
-        body: { messages, scope: id },
-      }),
+      prepareSendMessagesRequest: async ({ messages, id }) => {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        return {
+          body: { messages, scope: id },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        };
+      },
     }),
   });
 
