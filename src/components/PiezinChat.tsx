@@ -23,10 +23,15 @@ export function PiezinChat({ scope = "home", title }: { scope?: string; title?: 
       prepareSendMessagesRequest: async ({ messages, id }) => {
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
-        return {
+        const request: { body: object; headers?: HeadersInit } = {
           body: { messages, scope: id },
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
         };
+
+        if (token) {
+          request.headers = { Authorization: `Bearer ${token}` };
+        }
+
+        return request;
       },
     }),
   });
