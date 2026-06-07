@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { RequireAuth } from "@/components/RequireAuth";
+import { RouletteModal } from "@/components/RouletteModal";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, Disc3, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Mi panel — Pieza a Pieza" }] }),
@@ -14,6 +16,7 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardPage() {
   const { user } = useAuth();
+  const [rouletteOpen, setRouletteOpen] = useState(false);
   const { data: enrollments, isLoading } = useQuery({
     queryKey: ["dashboard-enrollments", user?.id],
     enabled: !!user,
@@ -27,6 +30,33 @@ function DashboardPage() {
       return data ?? [];
     },
   });
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("stars")
+        .eq("id", user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: spins } = useQuery({
+    queryKey: ["spins", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("roulette_spins")
+        .select("id")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const availableSpins = Math.max(0, Math.floor((profile?.stars ?? 0) / 10) - (spins?.length ?? 0));
 
   return (
     <RequireAuth>
@@ -35,6 +65,28 @@ function DashboardPage() {
         <main className="container mx-auto px-4 py-12">
           <h1 className="text-4xl font-extrabold">Mi panel</h1>
           <p className="text-muted-foreground mt-2">Aquí verás tus cursos, progreso y estrellas.</p>
+
+          {availableSpins > 0 && (
+            <section className="mt-8 rounded-2xl border bg-card p-5 shadow-[var(--shadow-soft)]">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-11 items-center justify-center rounded-xl bg-accent/20 text-primary">
+                    <Disc3 className="size-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold">Ruleta de premios</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Tienes {availableSpins} giro{availableSpins === 1 ? "" : "s"} disponible
+                      {availableSpins === 1 ? "" : "s"} por tus estrellas.
+                    </p>
+                  </div>
+                </div>
+                <Button className="rounded-full" onClick={() => setRouletteOpen(true)}>
+                  Girar ruleta
+                </Button>
+              </div>
+            </section>
+          )}
 
           {isLoading && <p className="mt-10 text-muted-foreground">Cargando tus cursos...</p>}
 
@@ -79,6 +131,7 @@ function DashboardPage() {
             </section>
           )}
         </main>
+        {rouletteOpen && <RouletteModal onClose={() => setRouletteOpen(false)} />}
       </div>
     </RequireAuth>
   );
