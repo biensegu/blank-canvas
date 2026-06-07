@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Outlet, createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +15,12 @@ const ACCENT: Record<string, string> = {
 };
 
 function CursosPage() {
+  const location = useLocation();
+  if (location.pathname !== "/cursos") return <Outlet />;
+  return <CursosCatalog />;
+}
+
+function CursosCatalog() {
   const { data: courses, isLoading } = useQuery({
     queryKey: ["courses"],
     queryFn: async () => {
