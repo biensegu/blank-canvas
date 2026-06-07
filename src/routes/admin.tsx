@@ -75,7 +75,8 @@ function AdminRouteComponent() {
                   icon: BarChart3,
                   title: "Analítica de usuarios",
                   desc: "Navegación, tiempo, cursos, estrellas y ruletas giradas.",
-                  to: "/admin",
+                  to: "/admin/analytics",
+                  ready: true,
                 },
                 {
                   icon: Megaphone,

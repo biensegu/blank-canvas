@@ -21,6 +21,7 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminRouletteRouteImport } from './routes/admin.roulette'
 import { Route as AdminEnrollmentsRouteImport } from './routes/admin.enrollments'
 import { Route as AdminContentRouteImport } from './routes/admin.content'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -82,6 +83,11 @@ const AdminContentRoute = AdminContentRouteImport.update({
   path: '/content',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/roulette': typeof AdminRouletteRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/roulette': typeof AdminRouletteRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/roulette': typeof AdminRouletteRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
     | '/admin/roulette'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
     | '/admin/roulette'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
     | '/admin/roulette'
@@ -266,10 +278,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminContentRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminContentRoute: typeof AdminContentRoute
   AdminEnrollmentsRoute: typeof AdminEnrollmentsRoute
   AdminRouletteRoute: typeof AdminRouletteRoute
@@ -278,6 +298,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminContentRoute: AdminContentRoute,
   AdminEnrollmentsRoute: AdminEnrollmentsRoute,
   AdminRouletteRoute: AdminRouletteRoute,
