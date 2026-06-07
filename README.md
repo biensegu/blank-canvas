@@ -48,6 +48,9 @@ SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
+AI_GATEWAY_API_KEY=
+AI_GATEWAY_BASE_URL=https://api.openai.com/v1
+PIEZIN_AI_MODEL=gpt-4.1-mini
 ```
 
 Notas:
@@ -55,6 +58,9 @@ Notas:
 - `VITE_SUPABASE_URL` y `SUPABASE_URL` deben apuntar al mismo proyecto Supabase.
 - `VITE_SUPABASE_PUBLISHABLE_KEY` y `SUPABASE_PUBLISHABLE_KEY` son claves publicas de cliente.
 - `SUPABASE_SERVICE_ROLE_KEY` es secreta y solo debe existir en servidor/local seguro.
+- `AI_GATEWAY_API_KEY` es secreta y alimenta el endpoint de Piezin.
+- `AI_GATEWAY_BASE_URL` permite usar cualquier proveedor compatible con OpenAI.
+- `PIEZIN_AI_MODEL` define el modelo usado por Piezin.
 - Nunca subir `.env`, service role keys ni contrasenas al repositorio.
 
 ## Base de datos
@@ -131,11 +137,11 @@ Flujo probado contra Supabase propio:
 
 Lovable puede quedar como herramienta historica o de preview, pero no es la fuente principal del proyecto.
 
+El build local ya usa configuracion Vite/TanStack explicita y no depende de paquetes de Lovable.
+
 La fuente de verdad recomendada es:
 
 1. Codigo en GitHub.
 2. Desarrollo local.
 3. Base de datos Supabase propia.
 4. Despliegue en un entorno Node controlado.
-
-Nota tecnica: el proyecto todavia usa paquetes de configuracion heredados de Lovable para Vite/TanStack. Eso no impide trabajar en local ni usar Supabase propio, pero conviene sustituir esa configuracion por una configuracion Vite/TanStack estandar antes de preparar un despliegue definitivo en VPS.
