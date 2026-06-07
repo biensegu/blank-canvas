@@ -18,6 +18,7 @@ import { Route as CursosSlugRouteImport } from './routes/cursos.$slug'
 import { Route as ApiPiezinRouteImport } from './routes/api/piezin'
 import { Route as AdminVideoconferencesRouteImport } from './routes/admin.videoconferences'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminRouletteRouteImport } from './routes/admin.roulette'
 import { Route as AdminEnrollmentsRouteImport } from './routes/admin.enrollments'
 import { Route as AdminContentRouteImport } from './routes/admin.content'
 
@@ -66,6 +67,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminRouletteRoute = AdminRouletteRouteImport.update({
+  id: '/roulette',
+  path: '/roulette',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminEnrollmentsRoute = AdminEnrollmentsRouteImport.update({
   id: '/enrollments',
   path: '/enrollments',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
+  '/admin/roulette': typeof AdminRouletteRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
+  '/admin/roulette': typeof AdminRouletteRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
+  '/admin/roulette': typeof AdminRouletteRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin/content'
     | '/admin/enrollments'
+    | '/admin/roulette'
     | '/admin/users'
     | '/admin/videoconferences'
     | '/api/piezin'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin/content'
     | '/admin/enrollments'
+    | '/admin/roulette'
     | '/admin/users'
     | '/admin/videoconferences'
     | '/api/piezin'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin/content'
     | '/admin/enrollments'
+    | '/admin/roulette'
     | '/admin/users'
     | '/admin/videoconferences'
     | '/api/piezin'
@@ -233,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/roulette': {
+      id: '/admin/roulette'
+      path: '/roulette'
+      fullPath: '/admin/roulette'
+      preLoaderRoute: typeof AdminRouletteRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/enrollments': {
       id: '/admin/enrollments'
       path: '/enrollments'
@@ -253,6 +272,7 @@ declare module '@tanstack/react-router' {
 interface AdminRouteChildren {
   AdminContentRoute: typeof AdminContentRoute
   AdminEnrollmentsRoute: typeof AdminEnrollmentsRoute
+  AdminRouletteRoute: typeof AdminRouletteRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminVideoconferencesRoute: typeof AdminVideoconferencesRoute
 }
@@ -260,6 +280,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminContentRoute: AdminContentRoute,
   AdminEnrollmentsRoute: AdminEnrollmentsRoute,
+  AdminRouletteRoute: AdminRouletteRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminVideoconferencesRoute: AdminVideoconferencesRoute,
 }

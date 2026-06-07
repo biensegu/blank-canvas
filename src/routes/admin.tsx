@@ -68,7 +68,8 @@ function AdminRouteComponent() {
                   icon: Disc3,
                   title: "Ruleta",
                   desc: "Configura los 8 slots, cofres y la tutoría individualizada.",
-                  to: "/admin",
+                  to: "/admin/roulette",
+                  ready: true,
                 },
                 {
                   icon: BarChart3,
