@@ -61,7 +61,8 @@ function AdminRouteComponent() {
                   icon: Video,
                   title: "Videoconferencias",
                   desc: "Programa enlaces de BigBlueButton por curso.",
-                  to: "/admin",
+                  to: "/admin/videoconferences",
+                  ready: true,
                 },
                 {
                   icon: Disc3,
