@@ -18,6 +18,7 @@ import { Route as CursosSlugRouteImport } from './routes/cursos.$slug'
 import { Route as ApiPiezinRouteImport } from './routes/api/piezin'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminEnrollmentsRouteImport } from './routes/admin.enrollments'
+import { Route as AdminContentRouteImport } from './routes/admin.content'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -64,6 +65,11 @@ const AdminEnrollmentsRoute = AdminEnrollmentsRouteImport.update({
   path: '/enrollments',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminContentRoute = AdminContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/piezin': typeof ApiPiezinRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/content'
     | '/admin/enrollments'
     | '/admin/users'
     | '/api/piezin'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/content'
     | '/admin/enrollments'
     | '/admin/users'
     | '/api/piezin'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/admin/content'
     | '/admin/enrollments'
     | '/admin/users'
     | '/api/piezin'
@@ -209,15 +221,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminEnrollmentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/content': {
+      id: '/admin/content'
+      path: '/content'
+      fullPath: '/admin/content'
+      preLoaderRoute: typeof AdminContentRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminContentRoute: typeof AdminContentRoute
   AdminEnrollmentsRoute: typeof AdminEnrollmentsRoute
   AdminUsersRoute: typeof AdminUsersRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminContentRoute: AdminContentRoute,
   AdminEnrollmentsRoute: AdminEnrollmentsRoute,
   AdminUsersRoute: AdminUsersRoute,
 }
