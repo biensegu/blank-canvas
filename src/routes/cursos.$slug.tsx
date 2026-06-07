@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useActivityTracker } from "@/hooks/use-activity-tracker";
 import { PiezinChat } from "@/components/PiezinChat";
 import { Button } from "@/components/ui/button";
-import { Lock, CheckCircle2, Play, FileText, Video } from "lucide-react";
+import { CalendarClock, CheckCircle2, ExternalLink, FileText, Lock, Play, Video } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
@@ -50,6 +50,20 @@ function CourseDetail() {
       const { data } = await supabase.from("enrollments")
         .select("id").eq("course_id", course!.id).eq("user_id", user!.id).maybeSingle();
       return !!data;
+    },
+  });
+
+  const { data: videoconferences } = useQuery({
+    queryKey: ["course-videoconferences", course?.id, user?.id],
+    enabled: !!course && !!user && !!enrolled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("videoconferences")
+        .select("*")
+        .eq("course_id", course!.id)
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -98,6 +112,43 @@ function CourseDetail() {
           </div>
         ) : (
           <div className="mt-8 space-y-6">
+            {videoconferences && videoconferences.length > 0 && (
+              <section className="rounded-2xl border bg-card p-5">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="size-5 text-primary" />
+                  <h2 className="font-bold">Videoconferencias</h2>
+                </div>
+                <div className="mt-4 grid gap-3">
+                  {videoconferences.map((vc) => (
+                    <article
+                      key={vc.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-4"
+                    >
+                      <div>
+                        <h3 className="font-semibold">{vc.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(vc.scheduled_at).toLocaleString("es-ES", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                        {vc.description && (
+                          <p className="mt-1 text-sm text-muted-foreground">{vc.description}</p>
+                        )}
+                      </div>
+                      <Button asChild size="sm" className="rounded-full">
+                        <a href={vc.bbb_url} target="_blank" rel="noopener noreferrer">
+                          Entrar <ExternalLink className="size-4" />
+                        </a>
+                      </Button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
             {topics?.length === 0 && <p className="text-muted-foreground">Aún no hay temas publicados.</p>}
             {topics?.map((t, idx) => (
               <TopicBlock key={t.id} topic={t} index={idx} prevTopic={idx>0 ? topics[idx-1] : null} userId={user!.id} />
