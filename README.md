@@ -36,6 +36,15 @@ npm run build
 npm run lint
 ```
 
+Arranque de produccion local:
+
+```bash
+npm run build
+npm run start
+```
+
+Por defecto escucha en `0.0.0.0:3000`. Puedes cambiarlo con `HOST` y `PORT`.
+
 ## Variables de entorno
 
 Crea un archivo `.env` local. No debe subirse a Git.
@@ -132,6 +141,33 @@ Flujo probado contra Supabase propio:
 5. Login alumno.
 6. `Mi panel` muestra el curso matriculado.
 7. `/cursos/normativa` muestra el detalle del curso.
+
+## Despliegue en VPS / Node
+
+Requisitos de servidor:
+
+- Node.js compatible con el proyecto.
+- npm.
+- Variables de entorno configuradas en el proceso.
+- Proxy inverso HTTPS delante del proceso Node, por ejemplo Nginx o Caddy.
+
+Flujo recomendado:
+
+```bash
+git pull
+npm ci
+npm run build
+PORT=3000 npm run start
+```
+
+Para mantener el proceso vivo en VPS usa un process manager como `systemd` o PM2.
+
+El proceso Node sirve:
+
+- Archivos estaticos desde `dist/client`.
+- SSR y rutas API desde `dist/server/server.js`.
+
+No necesita Lovable para ejecutarse.
 
 ## Lovable
 
