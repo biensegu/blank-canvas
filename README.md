@@ -34,6 +34,7 @@ Validacion:
 npx tsc --noEmit
 npm run build
 npm run lint
+npm run verify:http
 ```
 
 Arranque de produccion local:
@@ -60,6 +61,15 @@ VITE_SUPABASE_PUBLISHABLE_KEY=
 AI_GATEWAY_API_KEY=
 AI_GATEWAY_BASE_URL=https://api.openai.com/v1
 PIEZIN_AI_MODEL=gpt-4.1-mini
+```
+
+Variables opcionales para verificaciones RLS:
+
+```bash
+TEST_ADMIN_EMAIL=
+TEST_ADMIN_PASSWORD=
+TEST_STUDENT_EMAIL=
+TEST_STUDENT_PASSWORD=
 ```
 
 Notas:
@@ -112,6 +122,10 @@ Las pantallas admin actuales son:
 
 - `/admin/users`: usuarios, estado, bloqueo.
 - `/admin/enrollments`: matriculas manuales por curso.
+- `/admin/content`: cursos, temas, unidades y recursos.
+- `/admin/videoconferences`: videoconferencias por curso.
+- `/admin/roulette`: slots, pesos y payloads de premios.
+- `/admin/analytics`: actividad, progreso, matriculas, estrellas y giros.
 
 Las funciones de administracion comprueban primero que el usuario tenga rol `admin` y despues usan la clave de servidor para operaciones que requieren permisos elevados.
 
@@ -129,6 +143,20 @@ Comportamiento verificado:
 - Un admin autenticado puede acceder a las pantallas de usuarios y matriculas.
 
 Las operaciones administrativas de usuarios y matriculas se hacen mediante server functions, no directamente desde el cliente.
+
+Verificacion RLS contra Supabase:
+
+```bash
+npm run verify:rls
+```
+
+La verificacion requiere `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`, `TEST_STUDENT_EMAIL` y `TEST_STUDENT_PASSWORD` en el entorno local. No guardes esas contrasenas en el repositorio.
+
+Verificacion HTTP de rutas principales:
+
+```bash
+BASE_URL=http://localhost:8080 npm run verify:http
+```
 
 ## Flujo local verificado
 
