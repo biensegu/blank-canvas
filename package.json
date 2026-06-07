@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "start": "node scripts/serve-production.mjs",
     "lint": "eslint .",
+    "verify:http": "node scripts/verify-http.mjs",
+    "verify:rls": "node scripts/verify-rls.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {
