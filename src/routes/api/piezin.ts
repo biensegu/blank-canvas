@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 type Body = { messages?: unknown; scope?: unknown };
@@ -81,14 +81,16 @@ export const Route = createFileRoute("/api/piezin")({
         }
         const scopeStr = typeof scope === "string" ? scope : "home";
 
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const apiKey = process.env.AI_GATEWAY_API_KEY;
+        const baseURL = process.env.AI_GATEWAY_BASE_URL ?? "https://api.openai.com/v1";
+        const modelName = process.env.PIEZIN_AI_MODEL ?? "gpt-4.1-mini";
+        if (!apiKey) return new Response("Missing AI_GATEWAY_API_KEY", { status: 500 });
 
         const isUuid = /^[0-9a-f-]{36}$/i.test(scopeStr);
         const system = isUuid ? await buildCoursePrompt(scopeStr) : HOME_PROMPT;
 
-        const gateway = createLovableAiGatewayProvider(apiKey);
-        const model = gateway("google/gemini-3-flash-preview");
+        const gateway = createAiGatewayProvider(apiKey, baseURL);
+        const model = gateway(modelName);
 
         const result = streamText({
           model,
