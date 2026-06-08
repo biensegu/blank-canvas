@@ -34,11 +34,13 @@ import {
   deleteAdminTopic,
   deleteAdminUnit,
   listAdminContent,
+  restoreDefaultCourses,
   saveAdminCourse,
   saveAdminResource,
   saveAdminTopic,
   saveAdminUnit,
 } from "@/lib/admin-content.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 type Course = Awaited<ReturnType<typeof listAdminContent>>["courses"][number];
 type Topic = Awaited<ReturnType<typeof listAdminContent>>["topics"][number];
@@ -81,6 +83,7 @@ function AdminContentPage() {
   const qc = useQueryClient();
   const listContent = useServerFn(listAdminContent);
   const saveCourse = useServerFn(saveAdminCourse);
+  const restoreCourses = useServerFn(restoreDefaultCourses);
   const removeCourse = useServerFn(deleteAdminCourse);
   const saveTopic = useServerFn(saveAdminTopic);
   const removeTopic = useServerFn(deleteAdminTopic);
@@ -134,6 +137,16 @@ function AdminContentPage() {
       invalidate();
     },
     onError: (error: any) => toast.error(error?.message ?? "No se pudo guardar el curso"),
+  });
+
+  const restoreCoursesMutation = useMutation({
+    mutationFn: () => restoreCourses(),
+    onSuccess: (result) => {
+      toast.success("Cursos base restaurados");
+      setSelectedCourseId(result.courses.find((course: any) => course.slug === "normativa")?.id ?? "");
+      invalidate();
+    },
+    onError: (error: any) => toast.error(error?.message ?? "No se pudieron restaurar los cursos base"),
   });
 
   const deleteCourseMutation = useMutation({
@@ -230,18 +243,28 @@ function AdminContentPage() {
           <aside className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <h2 className="font-bold">Cursos</h2>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setSelectedCourseId("");
-                  setEditingTopic(null);
-                  setEditingUnit(null);
-                  setEditingResource(null);
-                }}
-              >
-                <Plus className="size-4" /> Nuevo
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => restoreCoursesMutation.mutate()}
+                  disabled={restoreCoursesMutation.isPending}
+                >
+                  Restaurar base
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedCourseId("");
+                    setEditingTopic(null);
+                    setEditingUnit(null);
+                    setEditingResource(null);
+                  }}
+                >
+                  <Plus className="size-4" /> Nuevo
+                </Button>
+              </div>
             </div>
 
             {contentQuery.isLoading ? (
@@ -713,15 +736,49 @@ function ResourceForm({
   nextPosition: number;
   onSubmit: (data: any) => void;
 }) {
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [uploading, setUploading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
+    let url = valueFromForm(form, "url");
+    const file = new FormData(form).get("file");
+
+    if (file instanceof File && file.size > 0) {
+      setUploading(true);
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session.session?.access_token;
+        if (!token) throw new Error("Sesión no disponible.");
+
+        const uploadForm = new FormData();
+        uploadForm.set("file", file);
+        uploadForm.set("unitId", unitId);
+        const response = await fetch("/api/admin/resource-upload", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: uploadForm,
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const uploaded = (await response.json()) as { url: string; fileName: string };
+        url = uploaded.url;
+        if (!valueFromForm(form, "title")) {
+          (form.elements.namedItem("title") as HTMLInputElement | null)!.value = uploaded.fileName;
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo subir el archivo");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
     onSubmit({
       id: resource?.id,
       unit_id: unitId,
       type: valueFromForm(form, "type"),
       title: valueFromForm(form, "title"),
-      url: valueFromForm(form, "url"),
+      url,
       position: numberFromForm(form, "position"),
     });
   }
@@ -744,9 +801,22 @@ function ResourceForm({
       <Field label="Título" name="title" defaultValue={resource?.title ?? ""} />
       <Field label="URL" name="url" defaultValue={resource?.url ?? ""} />
       <Field label="Pos." name="position" type="number" defaultValue={resource?.position ?? nextPosition} />
-      <Button type="submit" className="self-end">
-        <Save className="size-4" /> Guardar
+      <Button type="submit" className="self-end" disabled={uploading}>
+        {uploading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+        Guardar
       </Button>
+      <div className="md:col-span-5">
+        <Label htmlFor={`file-${unitId}`}>Subir material</Label>
+        <Input
+          id={`file-${unitId}`}
+          name="file"
+          type="file"
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.png,.jpg,.jpeg"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Si subes un archivo, se guardará como recurso privado. Si prefieres un enlace externo, deja el archivo vacío y escribe la URL.
+        </p>
+      </div>
     </form>
   );
 }

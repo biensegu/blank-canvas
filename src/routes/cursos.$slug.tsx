@@ -7,9 +7,11 @@ import { useActivityTracker } from "@/hooks/use-activity-tracker";
 import { PiezinChat } from "@/components/PiezinChat";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, CheckCircle2, ExternalLink, FileText, Lock, Play, Video } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
+import { getResourceAccessUrl } from "@/lib/resource-access.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/cursos/$slug")({
   head: ({ params }) => ({ meta: [{ title: `${params.slug} — Pieza a Pieza` }] }),
@@ -42,6 +44,34 @@ function CourseDetail() {
       return data ?? [];
     },
   });
+
+  const unitIds = useMemo(
+    () =>
+      (topics ?? [])
+        .flatMap((topic: any) => topic.units ?? [])
+        .map((unit: any) => unit.id),
+    [topics],
+  );
+
+  const { data: progressRows } = useQuery({
+    queryKey: ["course-progress", course?.id, user?.id, unitIds.join(",")],
+    enabled: !!course && !!user && unitIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("unit_progress")
+        .select("*")
+        .eq("user_id", user!.id)
+        .in("unit_id", unitIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const progressByUnit = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const row of progressRows ?? []) map.set(row.unit_id, row);
+    return map;
+  }, [progressRows]);
 
   const { data: enrolled } = useQuery({
     queryKey: ["enrolled", course?.id, user?.id],
@@ -151,7 +181,14 @@ function CourseDetail() {
             )}
             {topics?.length === 0 && <p className="text-muted-foreground">Aún no hay temas publicados.</p>}
             {topics?.map((t, idx) => (
-              <TopicBlock key={t.id} topic={t} index={idx} prevTopic={idx>0 ? topics[idx-1] : null} userId={user!.id} />
+              <TopicBlock
+                key={t.id}
+                topic={t}
+                index={idx}
+                prevTopic={idx > 0 ? topics[idx - 1] : null}
+                userId={user!.id}
+                progressByUnit={progressByUnit}
+              />
             ))}
           </div>
         )}
@@ -161,15 +198,27 @@ function CourseDetail() {
   );
 }
 
-function TopicBlock({ topic, userId }: { topic: any; index: number; prevTopic: any; userId: string }) {
-  const { data: unlocked, error: unlockError } = useQuery({
-    queryKey: ["topic-unlocked", topic.id, userId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("is_topic_unlocked", { _user: userId, _topic: topic.id });
-      if (error) throw error;
-      return !!data;
-    },
-  });
+function isUnitCompleted(unit: any, progressByUnit: Map<string, any>) {
+  return !!progressByUnit.get(unit.id)?.completed;
+}
+
+function TopicBlock({
+  topic,
+  index,
+  prevTopic,
+  userId,
+  progressByUnit,
+}: {
+  topic: any;
+  index: number;
+  prevTopic: any;
+  userId: string;
+  progressByUnit: Map<string, any>;
+}) {
+  const previousUnits = (prevTopic?.units ?? []).sort((a: any, b: any) => a.position - b.position);
+  const unlocked =
+    index === 0 || previousUnits.length === 0 || previousUnits.every((unit: any) => isUnitCompleted(unit, progressByUnit));
+  const units = (topic.units ?? []).sort((a: any, b: any) => a.position - b.position);
   return (
     <section className={`rounded-2xl border bg-card overflow-hidden ${!unlocked ? "opacity-60" : ""}`}>
       <header className="px-5 py-3 border-b flex items-center justify-between bg-muted/30">
@@ -179,15 +228,19 @@ function TopicBlock({ topic, userId }: { topic: any; index: number; prevTopic: a
         </h2>
         <span className="text-xs text-muted-foreground">{topic.units?.length ?? 0} unidades</span>
       </header>
-      {unlockError && (
-        <p className="px-5 py-3 text-sm text-destructive">
-          No se pudo comprobar el desbloqueo del tema.
-        </p>
-      )}
       {unlocked && (
         <div className="divide-y">
-          {(topic.units ?? []).sort((a:any,b:any)=>a.position-b.position).map((u: any) => (
-            <UnitRow key={u.id} unit={u} userId={userId} />
+          {units.map((unit: any, unitIndex: number) => (
+            <UnitRow
+              key={unit.id}
+              unit={unit}
+              userId={userId}
+              unlocked={
+                unitIndex === 0 ||
+                isUnitCompleted(units[unitIndex - 1], progressByUnit)
+              }
+              progress={progressByUnit.get(unit.id) ?? null}
+            />
           ))}
         </div>
       )}
@@ -195,26 +248,20 @@ function TopicBlock({ topic, userId }: { topic: any; index: number; prevTopic: a
   );
 }
 
-function UnitRow({ unit, userId }: { unit: any; userId: string }) {
+function UnitRow({
+  unit,
+  userId,
+  unlocked,
+  progress,
+}: {
+  unit: any;
+  userId: string;
+  unlocked: boolean;
+  progress: any;
+}) {
   const qc = useQueryClient();
   const award = useServerFn(awardStar);
   const [open, setOpen] = useState(false);
-  const { data: unlocked, error: unlockError } = useQuery({
-    queryKey: ["unit-unlocked", unit.id, userId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("is_unit_unlocked", { _user: userId, _unit: unit.id });
-      if (error) throw error;
-      return !!data;
-    },
-  });
-  const { data: progress } = useQuery({
-    queryKey: ["unit-progress", unit.id, userId],
-    queryFn: async () => {
-      const { data } = await supabase.from("unit_progress").select("*")
-        .eq("unit_id", unit.id).eq("user_id", userId).maybeSingle();
-      return data;
-    },
-  });
   const { data: resources } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
@@ -242,11 +289,24 @@ function UnitRow({ unit, userId }: { unit: any; userId: string }) {
     }, { onConflict: "user_id,unit_id" } as any);
     if (shouldComplete && !completed) {
       await award({ data: { reason: "video", ref: unit.id } });
-      qc.invalidateQueries({ queryKey: ["topic-unlocked"] });
-      qc.invalidateQueries({ queryKey: ["unit-unlocked"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     }
-    qc.invalidateQueries({ queryKey: ["unit-progress", unit.id] });
+    qc.invalidateQueries({ queryKey: ["course-progress"] });
+  }
+
+  async function completeUnit() {
+    await supabase.from("unit_progress").upsert({
+      user_id: userId,
+      unit_id: unit.id,
+      video_percent: 100,
+      completed: true,
+      completed_at: new Date().toISOString(),
+    }, { onConflict: "user_id,unit_id" } as any);
+    if (!completed) {
+      await award({ data: { reason: "unit", ref: unit.id } });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    }
+    qc.invalidateQueries({ queryKey: ["course-progress"] });
   }
 
   return (
@@ -269,11 +329,6 @@ function UnitRow({ unit, userId }: { unit: any; userId: string }) {
           <span className="text-xs text-muted-foreground tabular-nums">{progress?.video_percent}%</span>
         )}
       </button>
-      {unlockError && (
-        <p className="mt-2 text-xs text-destructive">
-          No se pudo comprobar el desbloqueo de la unidad.
-        </p>
-      )}
       {open && unlocked && (
         <div className="mt-4 space-y-4">
           {unit.youtube_video_id && (
@@ -283,20 +338,55 @@ function UnitRow({ unit, userId }: { unit: any; userId: string }) {
             <div className="space-y-1">
               <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
               {resources.map((r) => (
-                <a key={r.id} href={r.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm hover:text-primary py-1">
-                  {r.type === "video" ? <Video className="size-4" /> : <FileText className="size-4" />}
-                  {r.title}
-                </a>
+                <ResourceLink key={r.id} resource={r} />
               ))}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">
-            Necesitas ver al menos el {unit.min_watch_percent}% del vídeo para desbloquear la siguiente unidad.
-          </p>
+          {!unit.youtube_video_id && !completed && (
+            <Button size="sm" className="rounded-full" onClick={completeUnit}>
+              Marcar unidad como completada
+            </Button>
+          )}
+          {unit.youtube_video_id && (
+            <p className="text-xs text-muted-foreground">
+              Necesitas ver al menos el {unit.min_watch_percent}% del vídeo para desbloquear la siguiente unidad.
+            </p>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function ResourceLink({ resource }: { resource: any }) {
+  const getAccessUrl = useServerFn(getResourceAccessUrl);
+  const [opening, setOpening] = useState(false);
+
+  async function openResource() {
+    const target = window.open("about:blank", "_blank");
+    setOpening(true);
+    try {
+      const { url } = await getAccessUrl({ data: { resourceId: resource.id } });
+      if (target) target.location.href = url;
+      else window.location.href = url;
+    } catch (error) {
+      target?.close();
+      toast.error(error instanceof Error ? error.message : "No se pudo abrir el recurso");
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openResource}
+      disabled={opening}
+      className="flex items-center gap-2 py-1 text-left text-sm hover:text-primary disabled:opacity-60"
+    >
+      {resource.type === "video" ? <Video className="size-4" /> : <FileText className="size-4" />}
+      {resource.title}
+    </button>
   );
 }
 

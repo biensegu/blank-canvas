@@ -60,9 +60,79 @@ const ResourceInput = z.object({
   unit_id: z.string().uuid(),
   type: z.enum(["pdf", "ppt", "doc", "video", "link"]),
   title: z.string().trim().min(2).max(160),
-  url: z.string().trim().url().max(1000),
+  url: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((value) => {
+      if (value.startsWith("storage://course-materials/")) return true;
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "URL o ruta de Storage no válida"),
   position: z.coerce.number().int().min(0).max(999),
 });
+
+const DEFAULT_COURSES = [
+  {
+    slug: "normativa",
+    title: "Normativa",
+    description: "Normativa de Castilla-La Mancha para Orientación Educativa. Curso gratuito.",
+    price_cents: 0,
+    accent_color: "teal",
+    cover_emoji: "📜",
+    position: 0,
+    objectives:
+      "Conocer la normativa vigente de educación en Castilla-La Mancha aplicable a la especialidad de Orientación Educativa.",
+    materials_summary:
+      "Legislación estatal y autonómica, decretos, órdenes y resoluciones actualizadas.",
+    duration_hours: 30,
+    region: "Castilla-La Mancha",
+  },
+  {
+    slug: "programacion",
+    title: "Programación",
+    description: "Elaboración de la programación didáctica para Orientación Educativa.",
+    price_cents: 15000,
+    accent_color: "coral",
+    cover_emoji: "📝",
+    position: 1,
+    objectives:
+      "Diseñar una programación didáctica defendible, alineada con la normativa de Castilla-La Mancha.",
+    materials_summary: "Plantillas, ejemplos, criterios de evaluación y rúbricas.",
+    duration_hours: 60,
+    region: "Castilla-La Mancha",
+  },
+  {
+    slug: "supuestos",
+    title: "Supuestos",
+    description: "Resolución de supuestos prácticos de Orientación Educativa.",
+    price_cents: 15000,
+    accent_color: "amber",
+    cover_emoji: "🧩",
+    position: 2,
+    objectives: "Aprender a resolver supuestos prácticos con un esquema reproducible.",
+    materials_summary: "Banco de supuestos, soluciones comentadas y vídeos de resolución.",
+    duration_hours: 60,
+    region: "Castilla-La Mancha",
+  },
+  {
+    slug: "temas",
+    title: "Temas",
+    description: "Desarrollo del temario oficial de Orientación Educativa.",
+    price_cents: 15000,
+    accent_color: "teal",
+    cover_emoji: "📚",
+    position: 3,
+    objectives: "Dominar el temario oficial con esquemas, resúmenes y vídeos explicativos.",
+    materials_summary: "Temario completo en PDF, esquemas, vídeos y cuestionarios.",
+    duration_hours: 120,
+    region: "Castilla-La Mancha",
+  },
+];
 
 export const listAdminContent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -131,6 +201,69 @@ export const saveAdminCourse = createServerFn({ method: "POST" })
     const { data: saved, error } = await query;
     if (error) throw new Error(error.message);
     return { id: saved.id };
+  });
+
+export const restoreDefaultCourses = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("courses")
+      .upsert(DEFAULT_COURSES, { onConflict: "slug" })
+      .select("id, slug");
+    if (error) throw new Error(error.message);
+
+    const normativa = data?.find((course) => course.slug === "normativa");
+    if (normativa) {
+      const { data: existingTopic, error: existingTopicError } = await supabaseAdmin
+        .from("topics")
+        .select("id")
+        .eq("course_id", normativa.id)
+        .eq("position", 0)
+        .maybeSingle();
+      if (existingTopicError) throw new Error(existingTopicError.message);
+
+      let topicId = existingTopic?.id;
+      if (!topicId) {
+        const { data: topic, error: topicError } = await supabaseAdmin
+          .from("topics")
+          .insert({
+            course_id: normativa.id,
+            title: "Prueba de Normativa_1",
+            description: "Tema inicial de Normativa.",
+            position: 0,
+            bonus_points: 20,
+          })
+          .select("id")
+          .single();
+        if (topicError) throw new Error(topicError.message);
+        topicId = topic.id;
+      }
+
+      const { data: existingUnit, error: existingUnitError } = await supabaseAdmin
+        .from("units")
+        .select("id")
+        .eq("topic_id", topicId)
+        .eq("position", 0)
+        .maybeSingle();
+      if (existingUnitError) throw new Error(existingUnitError.message);
+
+      if (!existingUnit) {
+        const { error: unitError } = await supabaseAdmin.from("units").insert({
+          topic_id: topicId,
+          title: "Unidad 1",
+          description: "Unidad inicial de Normativa.",
+          position: 0,
+          youtube_video_id: null,
+          min_watch_percent: 0,
+          base_points: 10,
+        });
+        if (unitError) throw new Error(unitError.message);
+      }
+    }
+
+    return { courses: data ?? [] };
   });
 
 export const deleteAdminCourse = createServerFn({ method: "POST" })
