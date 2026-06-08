@@ -22,6 +22,7 @@ import { Route as AdminRouletteRouteImport } from './routes/admin.roulette'
 import { Route as AdminEnrollmentsRouteImport } from './routes/admin.enrollments'
 import { Route as AdminContentRouteImport } from './routes/admin.content'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as ApiAdminResourceUploadRouteImport } from './routes/api/admin/resource-upload'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -88,6 +89,11 @@ const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiAdminResourceUploadRoute = ApiAdminResourceUploadRouteImport.update({
+  id: '/api/admin/resource-upload',
+  path: '/api/admin/resource-upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
   '/cursos/$slug': typeof CursosSlugRoute
+  '/api/admin/resource-upload': typeof ApiAdminResourceUploadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
   '/cursos/$slug': typeof CursosSlugRoute
+  '/api/admin/resource-upload': typeof ApiAdminResourceUploadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/admin/videoconferences': typeof AdminVideoconferencesRoute
   '/api/piezin': typeof ApiPiezinRoute
   '/cursos/$slug': typeof CursosSlugRoute
+  '/api/admin/resource-upload': typeof ApiAdminResourceUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/admin/videoconferences'
     | '/api/piezin'
     | '/cursos/$slug'
+    | '/api/admin/resource-upload'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/admin/videoconferences'
     | '/api/piezin'
     | '/cursos/$slug'
+    | '/api/admin/resource-upload'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/admin/videoconferences'
     | '/api/piezin'
     | '/cursos/$slug'
+    | '/api/admin/resource-upload'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   ApiPiezinRoute: typeof ApiPiezinRoute
+  ApiAdminResourceUploadRoute: typeof ApiAdminResourceUploadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/admin/resource-upload': {
+      id: '/api/admin/resource-upload'
+      path: '/api/admin/resource-upload'
+      fullPath: '/api/admin/resource-upload'
+      preLoaderRoute: typeof ApiAdminResourceUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -326,6 +346,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   ApiPiezinRoute: ApiPiezinRoute,
+  ApiAdminResourceUploadRoute: ApiAdminResourceUploadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
