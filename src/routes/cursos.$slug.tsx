@@ -162,10 +162,11 @@ function CourseDetail() {
 }
 
 function TopicBlock({ topic, userId }: { topic: any; index: number; prevTopic: any; userId: string }) {
-  const { data: unlocked } = useQuery({
+  const { data: unlocked, error: unlockError } = useQuery({
     queryKey: ["topic-unlocked", topic.id, userId],
     queryFn: async () => {
-      const { data } = await supabase.rpc("is_topic_unlocked", { _user: userId, _topic: topic.id });
+      const { data, error } = await supabase.rpc("is_topic_unlocked", { _user: userId, _topic: topic.id });
+      if (error) throw error;
       return !!data;
     },
   });
@@ -178,6 +179,11 @@ function TopicBlock({ topic, userId }: { topic: any; index: number; prevTopic: a
         </h2>
         <span className="text-xs text-muted-foreground">{topic.units?.length ?? 0} unidades</span>
       </header>
+      {unlockError && (
+        <p className="px-5 py-3 text-sm text-destructive">
+          No se pudo comprobar el desbloqueo del tema.
+        </p>
+      )}
       {unlocked && (
         <div className="divide-y">
           {(topic.units ?? []).sort((a:any,b:any)=>a.position-b.position).map((u: any) => (
@@ -193,10 +199,11 @@ function UnitRow({ unit, userId }: { unit: any; userId: string }) {
   const qc = useQueryClient();
   const award = useServerFn(awardStar);
   const [open, setOpen] = useState(false);
-  const { data: unlocked } = useQuery({
+  const { data: unlocked, error: unlockError } = useQuery({
     queryKey: ["unit-unlocked", unit.id, userId],
     queryFn: async () => {
-      const { data } = await supabase.rpc("is_unit_unlocked", { _user: userId, _unit: unit.id });
+      const { data, error } = await supabase.rpc("is_unit_unlocked", { _user: userId, _unit: unit.id });
+      if (error) throw error;
       return !!data;
     },
   });
@@ -262,6 +269,11 @@ function UnitRow({ unit, userId }: { unit: any; userId: string }) {
           <span className="text-xs text-muted-foreground tabular-nums">{progress?.video_percent}%</span>
         )}
       </button>
+      {unlockError && (
+        <p className="mt-2 text-xs text-destructive">
+          No se pudo comprobar el desbloqueo de la unidad.
+        </p>
+      )}
       {open && unlocked && (
         <div className="mt-4 space-y-4">
           {unit.youtube_video_id && (
