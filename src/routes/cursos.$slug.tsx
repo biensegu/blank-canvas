@@ -240,6 +240,7 @@ function TopicBlock({
                 isUnitCompleted(units[unitIndex - 1], progressByUnit)
               }
               progress={progressByUnit.get(unit.id) ?? null}
+              defaultOpen={unitIndex === 0}
             />
           ))}
         </div>
@@ -253,15 +254,17 @@ function UnitRow({
   userId,
   unlocked,
   progress,
+  defaultOpen,
 }: {
   unit: any;
   userId: string;
   unlocked: boolean;
   progress: any;
+  defaultOpen: boolean;
 }) {
   const qc = useQueryClient();
   const award = useServerFn(awardStar);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen && unlocked);
   const { data: resources } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
@@ -311,11 +314,7 @@ function UnitRow({
 
   return (
     <div className="px-5 py-4">
-      <button
-        onClick={() => unlocked && setOpen(!open)}
-        className="w-full flex items-center justify-between gap-3 text-left"
-        disabled={!unlocked}
-      >
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {!unlocked ? <Lock className="size-4 text-muted-foreground" />
             : completed ? <CheckCircle2 className="size-5 text-[var(--success)]" />
@@ -325,23 +324,42 @@ function UnitRow({
             {unit.description && <div className="text-xs text-muted-foreground">{unit.description}</div>}
           </div>
         </div>
-        {unlocked && (progress?.video_percent ?? 0) > 0 && !completed && (
-          <span className="text-xs text-muted-foreground tabular-nums">{progress?.video_percent}%</span>
+        {unlocked && (
+          <div className="flex items-center gap-3">
+            {(progress?.video_percent ?? 0) > 0 && !completed && (
+              <span className="text-xs text-muted-foreground tabular-nums">{progress?.video_percent}%</span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant={open ? "secondary" : "outline"}
+              className="rounded-full"
+              onClick={() => setOpen(!open)}
+            >
+              {open ? "Cerrar unidad" : "Abrir unidad"}
+            </Button>
+          </div>
         )}
-      </button>
+      </div>
       {open && unlocked && (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 rounded-xl border bg-background p-4">
           {unit.youtube_video_id && (
             <YouTubePlayer videoId={unit.youtube_video_id} onProgress={onVideoMessage} />
           )}
-          {resources && resources.length > 0 && (
-            <div className="space-y-1">
-              <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
-              {resources.map((r) => (
+          <div className="space-y-2">
+            <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
+            {resources === undefined ? (
+              <p className="text-sm text-muted-foreground">Cargando materiales...</p>
+            ) : resources.length > 0 ? (
+              resources.map((r) => (
                 <ResourceLink key={r.id} resource={r} />
-              ))}
-            </div>
-          )}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Esta unidad todavía no tiene materiales subidos.
+              </p>
+            )}
+          </div>
           {!unit.youtube_video_id && !completed && (
             <Button size="sm" className="rounded-full" onClick={completeUnit}>
               Marcar unidad como completada
