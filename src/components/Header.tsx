@@ -57,10 +57,9 @@ export function Header() {
               </Button>
             </>
           ) : (
-            <>
-              <Button asChild variant="ghost" size="sm"><Link to="/login">Entrar</Link></Button>
-              <Button asChild size="sm" className="rounded-full"><Link to="/login">Empezar</Link></Button>
-            </>
+            <Button asChild size="sm" className="rounded-full">
+              <Link to="/login">Entrar</Link>
+            </Button>
           )}
         </nav>
       </div>
