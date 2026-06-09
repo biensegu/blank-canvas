@@ -7,7 +7,7 @@ import { useActivityTracker } from "@/hooks/use-activity-tracker";
 import { PiezinChat } from "@/components/PiezinChat";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, CheckCircle2, ExternalLink, FileText, Lock, Play, Video } from "lucide-react";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
 import { getResourceAccessUrl } from "@/lib/resource-access.functions";
@@ -34,23 +34,22 @@ function CourseDetail() {
 
   useActivityTracker("course_view", course?.id);
 
-  const { data: topics } = useQuery({
-    queryKey: ["topics", course?.id],
+  const { data: courseUnits } = useQuery({
+    queryKey: ["course-units", course?.id],
     enabled: !!course,
     queryFn: async () => {
       const { data } = await supabase
         .from("topics").select("*, units(*)")
         .eq("course_id", course!.id).order("position");
-      return data ?? [];
+      return (data ?? [])
+        .flatMap((topic: any) => topic.units ?? [])
+        .sort((a: any, b: any) => a.position - b.position);
     },
   });
 
   const unitIds = useMemo(
-    () =>
-      (topics ?? [])
-        .flatMap((topic: any) => topic.units ?? [])
-        .map((unit: any) => unit.id),
-    [topics],
+    () => (courseUnits ?? []).map((unit: any) => unit.id),
+    [courseUnits],
   );
 
   const { data: progressRows } = useQuery({
@@ -179,17 +178,10 @@ function CourseDetail() {
                 </div>
               </section>
             )}
-            {topics?.length === 0 && <p className="text-muted-foreground">Aún no hay temas publicados.</p>}
-            {topics?.map((t, idx) => (
-              <TopicBlock
-                key={t.id}
-                topic={t}
-                index={idx}
-                prevTopic={idx > 0 ? topics[idx - 1] : null}
-                userId={user!.id}
-                progressByUnit={progressByUnit}
-              />
-            ))}
+            {courseUnits?.length === 0 && <p className="text-muted-foreground">Aún no hay unidades publicadas.</p>}
+            {courseUnits && courseUnits.length > 0 && (
+              <UnitsBlock units={courseUnits} userId={user!.id} progressByUnit={progressByUnit} />
+            )}
           </div>
         )}
       </main>
@@ -202,49 +194,39 @@ function isUnitCompleted(unit: any, progressByUnit: Map<string, any>) {
   return !!progressByUnit.get(unit.id)?.completed;
 }
 
-function TopicBlock({
-  topic,
-  index,
-  prevTopic,
+function UnitsBlock({
+  units,
   userId,
   progressByUnit,
 }: {
-  topic: any;
-  index: number;
-  prevTopic: any;
+  units: any[];
   userId: string;
   progressByUnit: Map<string, any>;
 }) {
-  const previousUnits = (prevTopic?.units ?? []).sort((a: any, b: any) => a.position - b.position);
-  const unlocked =
-    index === 0 || previousUnits.length === 0 || previousUnits.every((unit: any) => isUnitCompleted(unit, progressByUnit));
-  const units = (topic.units ?? []).sort((a: any, b: any) => a.position - b.position);
   return (
-    <section className={`rounded-2xl border bg-card overflow-hidden ${!unlocked ? "opacity-60" : ""}`}>
+    <section className="rounded-2xl border bg-card overflow-hidden">
       <header className="px-5 py-3 border-b flex items-center justify-between bg-muted/30">
         <h2 className="font-bold flex items-center gap-2">
-          {unlocked ? <CheckCircle2 className="size-5 text-[var(--success)]" /> : <Lock className="size-4 text-muted-foreground" />}
-          {topic.title}
+          <CheckCircle2 className="size-5 text-[var(--success)]" />
+          Unidades
         </h2>
-        <span className="text-xs text-muted-foreground">{topic.units?.length ?? 0} unidades</span>
+        <span className="text-xs text-muted-foreground">{units.length} unidades</span>
       </header>
-      {unlocked && (
-        <div className="divide-y">
-          {units.map((unit: any, unitIndex: number) => (
-            <UnitRow
-              key={unit.id}
-              unit={unit}
-              userId={userId}
-              unlocked={
-                unitIndex === 0 ||
-                isUnitCompleted(units[unitIndex - 1], progressByUnit)
-              }
-              progress={progressByUnit.get(unit.id) ?? null}
-              defaultOpen={unitIndex === 0}
-            />
-          ))}
-        </div>
-      )}
+      <div className="divide-y">
+        {units.map((unit: any, unitIndex: number) => (
+          <UnitRow
+            key={unit.id}
+            unit={unit}
+            userId={userId}
+            unlocked={
+              unitIndex === 0 ||
+              isUnitCompleted(units[unitIndex - 1], progressByUnit)
+            }
+            progress={progressByUnit.get(unit.id) ?? null}
+            defaultOpen={unitIndex === 0}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -275,28 +257,6 @@ function UnitRow({
   });
 
   const completed = !!progress?.completed;
-  const lastSent = useRef(0);
-
-  async function onVideoMessage(percent: number) {
-    // Throttle updates
-    if (Date.now() - lastSent.current < 5000 && percent < unit.min_watch_percent) return;
-    lastSent.current = Date.now();
-    const finalPercent = Math.max(progress?.video_percent ?? 0, Math.min(100, Math.round(percent)));
-    const shouldComplete = finalPercent >= unit.min_watch_percent;
-    await supabase.from("unit_progress").upsert({
-      user_id: userId,
-      unit_id: unit.id,
-      video_percent: finalPercent,
-      completed: shouldComplete,
-      completed_at: shouldComplete ? new Date().toISOString() : null,
-    }, { onConflict: "user_id,unit_id" } as any);
-    if (shouldComplete && !completed) {
-      await award({ data: { reason: "video", ref: unit.id } });
-      qc.invalidateQueries({ queryKey: ["profile"] });
-    }
-    qc.invalidateQueries({ queryKey: ["course-progress"] });
-  }
-
   async function completeUnit() {
     await supabase.from("unit_progress").upsert({
       user_id: userId,
@@ -326,9 +286,6 @@ function UnitRow({
         </div>
         {unlocked && (
           <div className="flex items-center gap-3">
-            {(progress?.video_percent ?? 0) > 0 && !completed && (
-              <span className="text-xs text-muted-foreground tabular-nums">{progress?.video_percent}%</span>
-            )}
             <Button
               type="button"
               size="sm"
@@ -343,9 +300,6 @@ function UnitRow({
       </div>
       {open && unlocked && (
         <div className="mt-4 space-y-4 rounded-xl border bg-background p-4">
-          {unit.youtube_video_id && (
-            <YouTubePlayer videoId={unit.youtube_video_id} onProgress={onVideoMessage} />
-          )}
           <div className="space-y-2">
             <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
             {resources === undefined ? (
@@ -360,15 +314,10 @@ function UnitRow({
               </p>
             )}
           </div>
-          {!unit.youtube_video_id && !completed && (
+          {!completed && (
             <Button size="sm" className="rounded-full" onClick={completeUnit}>
               Marcar unidad como completada
             </Button>
-          )}
-          {unit.youtube_video_id && (
-            <p className="text-xs text-muted-foreground">
-              Necesitas ver al menos el {unit.min_watch_percent}% del vídeo para desbloquear la siguiente unidad.
-            </p>
           )}
         </div>
       )}
@@ -379,6 +328,8 @@ function UnitRow({
 function ResourceLink({ resource }: { resource: any }) {
   const getAccessUrl = useServerFn(getResourceAccessUrl);
   const [opening, setOpening] = useState(false);
+  const type = inferResourceType(resource);
+  const youtubeId = type === "video" ? parseYouTubeId(resource.url) : null;
 
   async function openResource() {
     const target = window.open("about:blank", "_blank");
@@ -396,55 +347,76 @@ function ResourceLink({ resource }: { resource: any }) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={openResource}
-      disabled={opening}
-      className="flex items-center gap-2 py-1 text-left text-sm hover:text-primary disabled:opacity-60"
-    >
-      {resource.type === "video" ? <Video className="size-4" /> : <FileText className="size-4" />}
-      {resource.title}
-    </button>
+    <div className="rounded-lg border bg-card/60 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          {type === "video" ? <Video className="size-4" /> : <FileText className="size-4" />}
+          <div>
+            <div className="font-medium">{resource.title}</div>
+            <div className="text-xs text-muted-foreground">{resourceTypeLabel(type)}</div>
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={openResource}
+          disabled={opening}
+          className="rounded-full"
+        >
+          {type === "videoconference" ? "Entrar" : "Abrir"}
+          <ExternalLink className="size-4" />
+        </Button>
+      </div>
+      {youtubeId && (
+        <div className="mt-3 aspect-video overflow-hidden rounded-xl bg-black">
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}?rel=0`}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            title={resource.title}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
-function YouTubePlayer({ videoId, onProgress }: { videoId: string; onProgress: (p: number) => void }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      iframeRef.current?.contentWindow?.postMessage(
-        '{"event":"listening","id":1}', "*"
-      );
-      iframeRef.current?.contentWindow?.postMessage(
-        '{"event":"command","func":"getCurrentTime","args":""}', "*"
-      );
-      iframeRef.current?.contentWindow?.postMessage(
-        '{"event":"command","func":"getDuration","args":""}', "*"
-      );
-    }, 3000);
-    let current = 0, duration = 0;
-    function handler(e: MessageEvent) {
-      try {
-        const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (d?.info?.currentTime) current = d.info.currentTime;
-        if (d?.info?.duration) duration = d.info.duration;
-        if (typeof d?.info === "number") current = d.info;
-        if (duration > 0) onProgress((current / duration) * 100);
-      } catch {}
+function parseYouTubeId(value: string) {
+  const raw = value.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.hostname.includes("youtu.be")) return url.pathname.slice(1) || null;
+    if (url.hostname.includes("youtube.com")) {
+      return url.searchParams.get("v") ?? url.pathname.match(/\/embed\/([^/]+)/)?.[1] ?? null;
     }
-    window.addEventListener("message", handler);
-    return () => { clearInterval(interval); window.removeEventListener("message", handler); };
-  }, [onProgress]);
-  return (
-    <div className="aspect-video rounded-xl overflow-hidden bg-black">
-      <iframe
-        ref={iframeRef}
-        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0`}
-        className="w-full h-full"
-        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="Vídeo de la unidad"
-      />
-    </div>
-  );
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function inferResourceType(resource: { type: string; url: string }) {
+  if (resource.type !== "link" && resource.type !== "doc") return resource.type;
+  const url = resource.url.toLowerCase();
+  if (/\.(png|jpe?g|webp|gif|svg)(\?|#|$)/.test(url)) return "image";
+  if (url.includes("bigbluebutton") || url.includes("/bbb/")) return "videoconference";
+  if (/\.(xls|xlsx|csv|zip)(\?|#|$)/.test(url)) return "file";
+  return resource.type;
+}
+
+function resourceTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    pdf: "PDF",
+    image: "Imagen",
+    video: "Vídeo",
+    file: "Archivo",
+    videoconference: "Videoconferencia",
+    ppt: "PowerPoint",
+    doc: "Documento",
+    link: "Enlace",
+  };
+  return labels[type] ?? type;
 }

@@ -35,30 +35,19 @@ const CourseInput = z.object({
   region: z.string().trim().min(2).max(120).optional().default("Castilla-La Mancha"),
 });
 
-const TopicInput = z.object({
+const UnitInput = z.object({
   id: z.string().uuid().optional(),
   course_id: z.string().uuid(),
   title: z.string().trim().min(2).max(160),
   description: NullableText.optional().default(null),
   position: z.coerce.number().int().min(0).max(999),
-  bonus_points: z.coerce.number().int().min(0).max(1000),
-});
-
-const UnitInput = z.object({
-  id: z.string().uuid().optional(),
-  topic_id: z.string().uuid(),
-  title: z.string().trim().min(2).max(160),
-  description: NullableText.optional().default(null),
-  position: z.coerce.number().int().min(0).max(999),
-  youtube_video_id: NullableText.optional().default(null),
-  min_watch_percent: z.coerce.number().int().min(0).max(100),
   base_points: z.coerce.number().int().min(0).max(1000),
 });
 
 const ResourceInput = z.object({
   id: z.string().uuid().optional(),
   unit_id: z.string().uuid(),
-  type: z.enum(["pdf", "ppt", "doc", "video", "link"]),
+  type: z.enum(["pdf", "image", "video", "file", "videoconference", "ppt", "doc", "link"]),
   title: z.string().trim().min(2).max(160),
   url: z
     .string()
@@ -66,6 +55,7 @@ const ResourceInput = z.object({
     .max(1000)
     .refine((value) => {
       if (value.startsWith("storage://course-materials/")) return true;
+      if (/^[a-zA-Z0-9_-]{11}$/.test(value)) return true;
       try {
         new URL(value);
         return true;
@@ -75,6 +65,14 @@ const ResourceInput = z.object({
     }, "URL o ruta de Storage no válida"),
   position: z.coerce.number().int().min(0).max(999),
 });
+
+type ResourceType = z.infer<typeof ResourceInput>["type"];
+
+const LEGACY_RESOURCE_TYPE_FALLBACK: Partial<Record<ResourceType, ResourceType>> = {
+  image: "link",
+  file: "doc",
+  videoconference: "link",
+};
 
 const DEFAULT_COURSES = [
   {
@@ -133,6 +131,32 @@ const DEFAULT_COURSES = [
     region: "Castilla-La Mancha",
   },
 ];
+
+async function ensureCourseContentTopic(supabaseAdmin: any, courseId: string) {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("topics")
+    .select("id")
+    .eq("course_id", courseId)
+    .order("position")
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (existing?.id) return existing.id;
+
+  const { data: topic, error } = await supabaseAdmin
+    .from("topics")
+    .insert({
+      course_id: courseId,
+      title: "Contenido",
+      description: "Contenedor técnico de unidades.",
+      position: 0,
+      bonus_points: 0,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return topic.id;
+}
 
 export const listAdminContent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -216,30 +240,7 @@ export const restoreDefaultCourses = createServerFn({ method: "POST" })
 
     const normativa = data?.find((course) => course.slug === "normativa");
     if (normativa) {
-      const { data: existingTopic, error: existingTopicError } = await supabaseAdmin
-        .from("topics")
-        .select("id")
-        .eq("course_id", normativa.id)
-        .eq("position", 0)
-        .maybeSingle();
-      if (existingTopicError) throw new Error(existingTopicError.message);
-
-      let topicId = existingTopic?.id;
-      if (!topicId) {
-        const { data: topic, error: topicError } = await supabaseAdmin
-          .from("topics")
-          .insert({
-            course_id: normativa.id,
-            title: "Prueba de Normativa_1",
-            description: "Tema inicial de Normativa.",
-            position: 0,
-            bonus_points: 20,
-          })
-          .select("id")
-          .single();
-        if (topicError) throw new Error(topicError.message);
-        topicId = topic.id;
-      }
+      const topicId = await ensureCourseContentTopic(supabaseAdmin, normativa.id);
 
       const { data: existingUnit, error: existingUnitError } = await supabaseAdmin
         .from("units")
@@ -285,51 +286,20 @@ export const deleteAdminCourse = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const saveAdminTopic = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => TopicInput.parse(data))
-  .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const payload = {
-      course_id: data.course_id,
-      title: data.title,
-      description: data.description,
-      position: data.position,
-      bonus_points: data.bonus_points,
-    };
-    const query = data.id
-      ? supabaseAdmin.from("topics").update(payload).eq("id", data.id).select("id").single()
-      : supabaseAdmin.from("topics").insert(payload).select("id").single();
-    const { data: saved, error } = await query;
-    if (error) throw new Error(error.message);
-    return { id: saved.id };
-  });
-
-export const deleteAdminTopic = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => IdInput.parse(data))
-  .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("topics").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
-
 export const saveAdminUnit = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => UnitInput.parse(data))
   .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const topicId = await ensureCourseContentTopic(supabaseAdmin, data.course_id);
     const payload = {
-      topic_id: data.topic_id,
+      topic_id: topicId,
       title: data.title,
       description: data.description,
       position: data.position,
-      youtube_video_id: data.youtube_video_id,
-      min_watch_percent: data.min_watch_percent,
+      youtube_video_id: null,
+      min_watch_percent: 0,
       base_points: data.base_points,
     };
     const query = data.id
@@ -364,11 +334,24 @@ export const saveAdminResource = createServerFn({ method: "POST" })
       url: data.url,
       position: data.position,
     };
-    const query = data.id
-      ? supabaseAdmin.from("resources").update(payload).eq("id", data.id).select("id").single()
-      : supabaseAdmin.from("resources").insert(payload).select("id").single();
-    const { data: saved, error } = await query;
+    const runSave = (resourcePayload: typeof payload) =>
+      data.id
+        ? supabaseAdmin.from("resources").update(resourcePayload).eq("id", data.id).select("id").single()
+        : supabaseAdmin.from("resources").insert(resourcePayload).select("id").single();
+
+    let { data: saved, error } = await runSave(payload);
+
+    if (error?.message?.includes("resources_type_check")) {
+      const fallbackType = LEGACY_RESOURCE_TYPE_FALLBACK[data.type];
+      if (fallbackType) {
+        const retry = await runSave({ ...payload, type: fallbackType });
+        saved = retry.data;
+        error = retry.error;
+      }
+    }
+
     if (error) throw new Error(error.message);
+    if (!saved) throw new Error("No se pudo guardar el recurso.");
     return { id: saved.id };
   });
 
