@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 
 const AwardInput = z.object({
-  reason: z.enum(["video", "quiz", "vc", "resource"]),
+  reason: z.enum(["unit", "video", "quiz", "vc", "resource"]),
   ref: z.string().min(1).max(120),
   amount: z.number().int().min(1).max(10).default(1),
 });
