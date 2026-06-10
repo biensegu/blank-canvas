@@ -22,7 +22,12 @@ const IdInput = z.object({ id: z.string().uuid() });
 
 const CourseInput = z.object({
   id: z.string().uuid().optional(),
-  slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  slug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   title: z.string().trim().min(2).max(160),
   description: NullableText.optional().default(null),
   price_cents: z.coerce.number().int().min(0).max(999_999),
@@ -67,12 +72,6 @@ const ResourceInput = z.object({
 });
 
 type ResourceType = z.infer<typeof ResourceInput>["type"];
-
-const LEGACY_RESOURCE_TYPE_FALLBACK: Partial<Record<ResourceType, ResourceType>> = {
-  image: "link",
-  file: "doc",
-  videoconference: "link",
-};
 
 const DEFAULT_COURSES = [
   {
@@ -182,6 +181,16 @@ export const listAdminContent = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
     }
 
+    const topicCourseById = new Map<string, string>();
+    (topics ?? []).forEach((topic) => {
+      topicCourseById.set(topic.id, topic.course_id);
+    });
+
+    const unitsWithCourse = (units ?? []).map((unit) => ({
+      ...unit,
+      course_id: topicCourseById.get(unit.topic_id) ?? null,
+    }));
+
     const enrollmentCounts = new Map<string, number>();
     (enrollments ?? []).forEach((enrollment) => {
       enrollmentCounts.set(
@@ -193,7 +202,7 @@ export const listAdminContent = createServerFn({ method: "POST" })
     return {
       courses: courses ?? [],
       topics: topics ?? [],
-      units: units ?? [],
+      units: unitsWithCourse,
       resources: resources ?? [],
       enrollmentCounts: Object.fromEntries(enrollmentCounts),
     };
@@ -336,19 +345,15 @@ export const saveAdminResource = createServerFn({ method: "POST" })
     };
     const runSave = (resourcePayload: typeof payload) =>
       data.id
-        ? supabaseAdmin.from("resources").update(resourcePayload).eq("id", data.id).select("id").single()
+        ? supabaseAdmin
+            .from("resources")
+            .update(resourcePayload)
+            .eq("id", data.id)
+            .select("id")
+            .single()
         : supabaseAdmin.from("resources").insert(resourcePayload).select("id").single();
 
-    let { data: saved, error } = await runSave(payload);
-
-    if (error?.message?.includes("resources_type_check")) {
-      const fallbackType = LEGACY_RESOURCE_TYPE_FALLBACK[data.type];
-      if (fallbackType) {
-        const retry = await runSave({ ...payload, type: fallbackType });
-        saved = retry.data;
-        error = retry.error;
-      }
-    }
+    const { data: saved, error } = await runSave(payload);
 
     if (error) throw new Error(error.message);
     if (!saved) throw new Error("No se pudo guardar el recurso.");

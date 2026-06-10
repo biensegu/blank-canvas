@@ -6,7 +6,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { useActivityTracker } from "@/hooks/use-activity-tracker";
 import { PiezinChat } from "@/components/PiezinChat";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, CheckCircle2, ExternalLink, FileText, Lock, Play, Video } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  Image,
+  LinkIcon,
+  Lock,
+  Play,
+  Video,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
@@ -39,18 +49,17 @@ function CourseDetail() {
     enabled: !!course,
     queryFn: async () => {
       const { data } = await supabase
-        .from("topics").select("*, units(*)")
-        .eq("course_id", course!.id).order("position");
+        .from("topics")
+        .select("id, position, units(*)")
+        .eq("course_id", course!.id)
+        .order("position");
       return (data ?? [])
         .flatMap((topic: any) => topic.units ?? [])
         .sort((a: any, b: any) => a.position - b.position);
     },
   });
 
-  const unitIds = useMemo(
-    () => (courseUnits ?? []).map((unit: any) => unit.id),
-    [courseUnits],
-  );
+  const unitIds = useMemo(() => (courseUnits ?? []).map((unit: any) => unit.id), [courseUnits]);
 
   const { data: progressRows } = useQuery({
     queryKey: ["course-progress", course?.id, user?.id, unitIds.join(",")],
@@ -76,8 +85,12 @@ function CourseDetail() {
     queryKey: ["enrolled", course?.id, user?.id],
     enabled: !!course && !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("enrollments")
-        .select("id").eq("course_id", course!.id).eq("user_id", user!.id).maybeSingle();
+      const { data } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("course_id", course!.id)
+        .eq("user_id", user!.id)
+        .maybeSingle();
       return !!data;
     },
   });
@@ -98,10 +111,13 @@ function CourseDetail() {
 
   if (!course) {
     return (
-      <div className="min-h-screen"><Header />
+      <div className="min-h-screen">
+        <Header />
         <main className="container mx-auto px-4 py-20 text-center">
           <p className="text-muted-foreground">Cargando o curso no encontrado…</p>
-          <Button asChild className="mt-6 rounded-full"><Link to="/cursos">Volver al catálogo</Link></Button>
+          <Button asChild className="mt-6 rounded-full">
+            <Link to="/cursos">Volver al catálogo</Link>
+          </Button>
         </main>
       </div>
     );
@@ -110,7 +126,10 @@ function CourseDetail() {
   const isFree = course.price_cents === 0;
 
   async function onEnroll() {
-    if (!user) { window.location.href = "/login"; return; }
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
     await enroll({ data: { courseId: course!.id } });
     qc.invalidateQueries({ queryKey: ["enrolled"] });
   }
@@ -119,17 +138,22 @@ function CourseDetail() {
     <div className="min-h-screen">
       <Header />
       <main className="container mx-auto px-4 py-10 max-w-5xl">
-        <Link to="/cursos" className="text-sm text-muted-foreground hover:text-primary">← Catálogo</Link>
+        <Link to="/cursos" className="text-sm text-muted-foreground hover:text-primary">
+          ← Catálogo
+        </Link>
         <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-4xl font-extrabold flex items-center gap-3">
-              <span className="text-5xl">{course.cover_emoji}</span>{course.title}
+              <span className="text-5xl">{course.cover_emoji}</span>
+              {course.title}
             </h1>
             <p className="text-muted-foreground mt-2 max-w-2xl">{course.description}</p>
           </div>
           {!enrolled && (
             <Button onClick={onEnroll} size="lg" className="rounded-full">
-              {isFree ? "Inscribirme gratis" : `Inscribirme · ${(course.price_cents/100).toFixed(0)} €`}
+              {isFree
+                ? "Inscribirme gratis"
+                : `Inscribirme · ${(course.price_cents / 100).toFixed(0)} €`}
             </Button>
           )}
         </div>
@@ -178,7 +202,9 @@ function CourseDetail() {
                 </div>
               </section>
             )}
-            {courseUnits?.length === 0 && <p className="text-muted-foreground">Aún no hay unidades publicadas.</p>}
+            {courseUnits?.length === 0 && (
+              <p className="text-muted-foreground">Aún no hay unidades publicadas.</p>
+            )}
             {courseUnits && courseUnits.length > 0 && (
               <UnitsBlock units={courseUnits} userId={user!.id} progressByUnit={progressByUnit} />
             )}
@@ -218,10 +244,7 @@ function UnitsBlock({
             key={unit.id}
             unit={unit}
             userId={userId}
-            unlocked={
-              unitIndex === 0 ||
-              isUnitCompleted(units[unitIndex - 1], progressByUnit)
-            }
+            unlocked={unitIndex === 0 || isUnitCompleted(units[unitIndex - 1], progressByUnit)}
             progress={progressByUnit.get(unit.id) ?? null}
             defaultOpen={unitIndex === 0}
           />
@@ -251,20 +274,27 @@ function UnitRow({
     queryKey: ["resources", unit.id],
     enabled: open,
     queryFn: async () => {
-      const { data } = await supabase.from("resources").select("*").eq("unit_id", unit.id).order("position");
+      const { data } = await supabase
+        .from("resources")
+        .select("*")
+        .eq("unit_id", unit.id)
+        .order("position");
       return data ?? [];
     },
   });
 
   const completed = !!progress?.completed;
   async function completeUnit() {
-    await supabase.from("unit_progress").upsert({
-      user_id: userId,
-      unit_id: unit.id,
-      video_percent: 100,
-      completed: true,
-      completed_at: new Date().toISOString(),
-    }, { onConflict: "user_id,unit_id" } as any);
+    await supabase.from("unit_progress").upsert(
+      {
+        user_id: userId,
+        unit_id: unit.id,
+        video_percent: 100,
+        completed: true,
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,unit_id" } as any,
+    );
     if (!completed) {
       await award({ data: { reason: "unit", ref: unit.id } });
       qc.invalidateQueries({ queryKey: ["profile"] });
@@ -274,14 +304,36 @@ function UnitRow({
 
   return (
     <div className="px-5 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {!unlocked ? <Lock className="size-4 text-muted-foreground" />
-            : completed ? <CheckCircle2 className="size-5 text-[var(--success)]" />
-            : <Play className="size-4 text-primary" />}
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-lg ${
+          unlocked ? "cursor-pointer hover:bg-muted/40" : ""
+        }`}
+        role={unlocked ? "button" : undefined}
+        tabIndex={unlocked ? 0 : undefined}
+        onClick={() => {
+          if (unlocked) setOpen(!open);
+        }}
+        onKeyDown={(event) => {
+          if (!unlocked) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setOpen(!open);
+          }
+        }}
+      >
+        <div className="flex items-center gap-3 p-2">
+          {!unlocked ? (
+            <Lock className="size-4 text-muted-foreground" />
+          ) : completed ? (
+            <CheckCircle2 className="size-5 text-[var(--success)]" />
+          ) : (
+            <Play className="size-4 text-primary" />
+          )}
           <div>
             <div className="font-semibold text-sm">{unit.title}</div>
-            {unit.description && <div className="text-xs text-muted-foreground">{unit.description}</div>}
+            {unit.description && (
+              <div className="text-xs text-muted-foreground">{unit.description}</div>
+            )}
           </div>
         </div>
         {unlocked && (
@@ -291,7 +343,10 @@ function UnitRow({
               size="sm"
               variant={open ? "secondary" : "outline"}
               className="rounded-full"
-              onClick={() => setOpen(!open)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpen(!open);
+              }}
             >
               {open ? "Cerrar unidad" : "Abrir unidad"}
             </Button>
@@ -305,9 +360,7 @@ function UnitRow({
             {resources === undefined ? (
               <p className="text-sm text-muted-foreground">Cargando materiales...</p>
             ) : resources.length > 0 ? (
-              resources.map((r) => (
-                <ResourceLink key={r.id} resource={r} />
-              ))
+              resources.map((r) => <ResourceLink key={r.id} resource={r} />)
             ) : (
               <p className="text-sm text-muted-foreground">
                 Esta unidad todavía no tiene materiales subidos.
@@ -335,7 +388,9 @@ function ResourceLink({ resource }: { resource: any }) {
     const target = window.open("about:blank", "_blank");
     setOpening(true);
     try {
-      const { url } = await getAccessUrl({ data: { resourceId: resource.id } });
+      const { url } = youtubeId
+        ? { url: `https://www.youtube.com/watch?v=${youtubeId}` }
+        : await getAccessUrl({ data: { resourceId: resource.id } });
       if (target) target.location.href = url;
       else window.location.href = url;
     } catch (error) {
@@ -350,7 +405,7 @@ function ResourceLink({ resource }: { resource: any }) {
     <div className="rounded-lg border bg-card/60 p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm">
-          {type === "video" ? <Video className="size-4" /> : <FileText className="size-4" />}
+          <ResourceIcon type={type} />
           <div>
             <div className="font-medium">{resource.title}</div>
             <div className="text-xs text-muted-foreground">{resourceTypeLabel(type)}</div>
@@ -364,7 +419,7 @@ function ResourceLink({ resource }: { resource: any }) {
           disabled={opening}
           className="rounded-full"
         >
-          {type === "videoconference" ? "Entrar" : "Abrir"}
+          {type === "videoconference" ? "Entrar" : youtubeId ? "Ver en YouTube" : "Abrir"}
           <ExternalLink className="size-4" />
         </Button>
       </div>
@@ -381,6 +436,13 @@ function ResourceLink({ resource }: { resource: any }) {
       )}
     </div>
   );
+}
+
+function ResourceIcon({ type }: { type: string }) {
+  if (type === "video" || type === "videoconference") return <Video className="size-4" />;
+  if (type === "image") return <Image className="size-4" />;
+  if (type === "link") return <LinkIcon className="size-4" />;
+  return <FileText className="size-4" />;
 }
 
 function parseYouTubeId(value: string) {

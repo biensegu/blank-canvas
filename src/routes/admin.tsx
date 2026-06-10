@@ -53,7 +53,7 @@ function AdminRouteComponent() {
                 {
                   icon: BookOpen,
                   title: "Cursos y contenido",
-                  desc: "Crear/editar cursos, temas, unidades, vídeos y recursos.",
+                  desc: "Crear/editar bloques o cursos, unidades y recursos.",
                   to: "/admin/content",
                   ready: true,
                 },

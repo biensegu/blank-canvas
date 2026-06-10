@@ -90,6 +90,7 @@ function AdminContentPage() {
 
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
+  const [unitFormOpen, setUnitFormOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [editingResource, setEditingResource] = useState<Resource | null>(null);
   const [resourceFormUnitId, setResourceFormUnitId] = useState("");
@@ -99,29 +100,15 @@ function AdminContentPage() {
     queryFn: () => listContent(),
   });
 
-  const courses = useMemo(
-    () => contentQuery.data?.courses ?? [],
-    [contentQuery.data?.courses],
-  );
+  const courses = useMemo(() => contentQuery.data?.courses ?? [], [contentQuery.data?.courses]);
   const selectedCourse = courses.find((course) => course.id === selectedCourseId) ?? null;
-  const topics = useMemo(
-    () =>
-      (contentQuery.data?.topics ?? [])
-        .filter((topic) => topic.course_id === selectedCourseId)
-        .sort((a, b) => a.position - b.position),
-    [contentQuery.data?.topics, selectedCourseId],
-  );
-  const units = useMemo(
-    () => contentQuery.data?.units ?? [],
-    [contentQuery.data?.units],
-  );
-  const selectedTopicIds = useMemo(() => new Set(topics.map((topic) => topic.id)), [topics]);
+  const units = useMemo(() => contentQuery.data?.units ?? [], [contentQuery.data?.units]);
   const courseUnits = useMemo(
     () =>
       units
-        .filter((unit) => selectedTopicIds.has(unit.topic_id))
+        .filter((unit) => unit.course_id === selectedCourseId)
         .sort((a, b) => a.position - b.position),
-    [selectedTopicIds, units],
+    [selectedCourseId, units],
   );
   const resources = contentQuery.data?.resources ?? [];
   const enrollmentCounts = contentQuery.data?.enrollmentCounts ?? {};
@@ -136,7 +123,6 @@ function AdminContentPage() {
     qc.invalidateQueries({ queryKey: ["admin-content"] });
     qc.invalidateQueries({ queryKey: ["courses"] });
     qc.invalidateQueries({ queryKey: ["course"] });
-    qc.invalidateQueries({ queryKey: ["topics"] });
     qc.invalidateQueries({ queryKey: ["course-units"] });
   }
 
@@ -146,6 +132,10 @@ function AdminContentPage() {
       toast.success("Curso guardado");
       setIsCreatingCourse(false);
       setSelectedCourseId(result.id);
+      setUnitFormOpen(false);
+      setEditingUnit(null);
+      setEditingResource(null);
+      setResourceFormUnitId("");
       invalidate();
     },
     onError: (error: any) => toast.error(error?.message ?? "No se pudo guardar el curso"),
@@ -156,10 +146,17 @@ function AdminContentPage() {
     onSuccess: (result) => {
       toast.success("Cursos base restaurados");
       setIsCreatingCourse(false);
-      setSelectedCourseId(result.courses.find((course: any) => course.slug === "normativa")?.id ?? "");
+      setSelectedCourseId(
+        result.courses.find((course: any) => course.slug === "normativa")?.id ?? "",
+      );
+      setUnitFormOpen(false);
+      setEditingUnit(null);
+      setEditingResource(null);
+      setResourceFormUnitId("");
       invalidate();
     },
-    onError: (error: any) => toast.error(error?.message ?? "No se pudieron restaurar los cursos base"),
+    onError: (error: any) =>
+      toast.error(error?.message ?? "No se pudieron restaurar los cursos base"),
   });
 
   const deleteCourseMutation = useMutation({
@@ -168,6 +165,10 @@ function AdminContentPage() {
       toast.success("Curso eliminado");
       setIsCreatingCourse(false);
       setSelectedCourseId("");
+      setUnitFormOpen(false);
+      setEditingUnit(null);
+      setEditingResource(null);
+      setResourceFormUnitId("");
       invalidate();
     },
     onError: (error: any) => toast.error(error?.message ?? "No se pudo eliminar el curso"),
@@ -178,6 +179,7 @@ function AdminContentPage() {
     onSuccess: () => {
       toast.success("Unidad guardada");
       setEditingUnit(null);
+      setUnitFormOpen(false);
       invalidate();
     },
     onError: (error: any) => toast.error(error?.message ?? "No se pudo guardar la unidad"),
@@ -187,6 +189,10 @@ function AdminContentPage() {
     mutationFn: (id: string) => removeUnit({ data: { id } }),
     onSuccess: () => {
       toast.success("Unidad eliminada");
+      setEditingUnit(null);
+      setUnitFormOpen(false);
+      setEditingResource(null);
+      setResourceFormUnitId("");
       invalidate();
     },
     onError: (error: any) => toast.error(error?.message ?? "No se pudo eliminar la unidad"),
@@ -228,17 +234,20 @@ function AdminContentPage() {
             <div>
               <h1 className="text-3xl font-extrabold">Cursos y contenido</h1>
               <p className="text-muted-foreground">
-                Edita cursos, temas, unidades, vídeos y recursos sin tocar la base manualmente.
+                Edita bloques o cursos, sus unidades y los recursos de cada unidad sin tocar la base
+                manualmente.
               </p>
             </div>
           </div>
-          {contentQuery.isFetching && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+          {contentQuery.isFetching && (
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          )}
         </div>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[320px,1fr]">
           <aside className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between border-b px-4 py-3">
-              <h2 className="font-bold">Cursos</h2>
+              <h2 className="font-bold">Bloques y cursos</h2>
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -254,6 +263,7 @@ function AdminContentPage() {
                   onClick={() => {
                     setIsCreatingCourse(true);
                     setSelectedCourseId("");
+                    setUnitFormOpen(false);
                     setEditingUnit(null);
                     setEditingResource(null);
                     setResourceFormUnitId("");
@@ -276,6 +286,7 @@ function AdminContentPage() {
                     onClick={() => {
                       setIsCreatingCourse(false);
                       setSelectedCourseId(course.id);
+                      setUnitFormOpen(false);
                       setEditingUnit(null);
                       setEditingResource(null);
                       setResourceFormUnitId("");
@@ -301,7 +312,7 @@ function AdminContentPage() {
 
           <section className="space-y-6">
             <CourseForm
-              key={isCreatingCourse ? "new-course" : selectedCourse?.id ?? "new-course"}
+              key={isCreatingCourse ? "new-course" : (selectedCourse?.id ?? "new-course")}
               course={isCreatingCourse ? null : selectedCourse}
               isSaving={saveCourseMutation.isPending}
               onSubmit={(data) => saveCourseMutation.mutate(data)}
@@ -322,10 +333,25 @@ function AdminContentPage() {
                   units={courseUnits}
                   resources={resources}
                   selectedCourseId={selectedCourse.id}
+                  selectedCourseTitle={selectedCourse.title}
+                  unitFormOpen={unitFormOpen}
                   editingUnit={editingUnit}
                   editingResource={editingResource}
                   resourceFormUnitId={resourceFormUnitId}
-                  setEditingUnit={setEditingUnit}
+                  setEditingUnit={(unit) => {
+                    setEditingUnit(unit);
+                    setUnitFormOpen(true);
+                  }}
+                  onNewUnit={() => {
+                    setEditingUnit(null);
+                    setUnitFormOpen(true);
+                    setEditingResource(null);
+                    setResourceFormUnitId("");
+                  }}
+                  onCancelUnitForm={() => {
+                    setEditingUnit(null);
+                    setUnitFormOpen(false);
+                  }}
                   setEditingResource={(resource) => {
                     setEditingResource(resource);
                     setResourceFormUnitId(resource?.unit_id ?? "");
@@ -333,7 +359,8 @@ function AdminContentPage() {
                   setResourceFormUnitId={setResourceFormUnitId}
                   onSaveUnit={(data) => saveUnitMutation.mutate(data)}
                   onDeleteUnit={(id) => {
-                    if (confirm("¿Eliminar esta unidad y sus recursos?")) deleteUnitMutation.mutate(id);
+                    if (confirm("¿Eliminar esta unidad y sus recursos?"))
+                      deleteUnitMutation.mutate(id);
                   }}
                   onSaveResource={(data) => saveResourceMutation.mutate(data)}
                   onDeleteResource={(id) => {
@@ -423,7 +450,9 @@ function CourseForm({
     <form onSubmit={submit} className="rounded-xl border bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">{course ? "Editar curso" : "Nuevo curso"}</h2>
+          <h2 className="text-xl font-bold">
+            {course ? "Editar bloque/curso" : "Nuevo curso adicional"}
+          </h2>
           <p className="text-sm text-muted-foreground">
             El precio se guarda en céntimos: 150 € = 15000.
           </p>
@@ -444,14 +473,26 @@ function CourseForm({
         <Field label="Título" name="title" defaultValue={form.title} className="xl:col-span-2" />
         <Field label="Slug" name="slug" defaultValue={form.slug} />
         <Field label="Posición" name="position" type="number" defaultValue={form.position} />
-        <Field label="Precio céntimos" name="price_cents" type="number" defaultValue={form.price_cents} />
-        <Field label="Horas" name="duration_hours" type="number" defaultValue={form.duration_hours} />
+        <Field
+          label="Precio céntimos"
+          name="price_cents"
+          type="number"
+          defaultValue={form.price_cents}
+        />
+        <Field
+          label="Horas"
+          name="duration_hours"
+          type="number"
+          defaultValue={form.duration_hours}
+        />
         <Field label="Emoji" name="cover_emoji" defaultValue={form.cover_emoji} />
         <Field label="Región" name="region" defaultValue={form.region} />
         <div>
           <Label>Color</Label>
           <Select name="accent_color" defaultValue={form.accent_color}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="teal">Teal</SelectItem>
               <SelectItem value="coral">Coral</SelectItem>
@@ -476,10 +517,14 @@ function UnitSection(props: {
   units: Unit[];
   resources: Resource[];
   selectedCourseId: string;
+  selectedCourseTitle: string;
+  unitFormOpen: boolean;
   editingUnit: Unit | null;
   editingResource: Resource | null;
   resourceFormUnitId: string;
   setEditingUnit: (unit: Unit | null) => void;
+  onNewUnit: () => void;
+  onCancelUnitForm: () => void;
   setEditingResource: (resource: Resource | null) => void;
   setResourceFormUnitId: (unitId: string) => void;
   onSaveUnit: (data: any) => void;
@@ -494,21 +539,25 @@ function UnitSection(props: {
           <div>
             <h2 className="text-xl font-bold">Unidades</h2>
             <p className="text-sm text-muted-foreground">
-              Cada curso contiene unidades. Cada unidad puede tener PDF, imágenes, vídeos, archivos, enlaces o videoconferencias.
+              {props.selectedCourseTitle} contiene unidades. Cada unidad agrupa sus PDF, imágenes,
+              vídeos, archivos, enlaces o videoconferencias.
             </p>
           </div>
-          <Button variant="outline" onClick={() => props.setEditingUnit(null)}>
+          <Button variant="outline" onClick={props.onNewUnit}>
             <Plus className="size-4" /> Nueva unidad
           </Button>
         </div>
 
-        <UnitForm
-          key={props.editingUnit?.id ?? "new-unit"}
-          courseId={props.selectedCourseId}
-          unit={props.editingUnit}
-          nextPosition={props.units.length}
-          onSubmit={props.onSaveUnit}
-        />
+        {props.unitFormOpen && (
+          <UnitForm
+            key={props.editingUnit?.id ?? "new-unit"}
+            courseId={props.selectedCourseId}
+            unit={props.editingUnit}
+            nextPosition={props.units.length}
+            onSubmit={props.onSaveUnit}
+            onCancel={props.onCancelUnitForm}
+          />
+        )}
       </div>
 
       {props.units.length === 0 ? (
@@ -550,11 +599,13 @@ function UnitForm({
   unit,
   nextPosition,
   onSubmit,
+  onCancel,
 }: {
   courseId: string;
   unit: Unit | null;
   nextPosition: number;
   onSubmit: (data: any) => void;
+  onCancel: () => void;
 }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -569,16 +620,40 @@ function UnitForm({
     });
   }
   return (
-    <form onSubmit={submit} className="rounded-lg border bg-background p-4">
+    <form onSubmit={submit} className="mt-4 rounded-lg border bg-background p-4">
       <h4 className="font-bold">{unit ? "Editar unidad" : "Nueva unidad"}</h4>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Título" name="title" defaultValue={unit?.title ?? ""} className="sm:col-span-2" />
-        <Field label="Posición" name="position" type="number" defaultValue={unit?.position ?? nextPosition} />
-        <Field label="Estrellas" name="base_points" type="number" defaultValue={unit?.base_points ?? 10} />
-        <TextAreaField label="Descripción" name="description" defaultValue={unit?.description ?? ""} />
-        <Button type="submit" className="sm:col-span-2">
-          <Save className="size-4" /> Guardar unidad
-        </Button>
+        <Field
+          label="Título"
+          name="title"
+          defaultValue={unit?.title ?? ""}
+          className="sm:col-span-2"
+        />
+        <Field
+          label="Posición"
+          name="position"
+          type="number"
+          defaultValue={unit?.position ?? nextPosition}
+        />
+        <Field
+          label="Estrellas"
+          name="base_points"
+          type="number"
+          defaultValue={unit?.base_points ?? 10}
+        />
+        <TextAreaField
+          label="Descripción"
+          name="description"
+          defaultValue={unit?.description ?? ""}
+        />
+        <div className="flex gap-2 sm:col-span-2">
+          <Button type="submit">
+            <Save className="size-4" /> Guardar unidad
+          </Button>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+        </div>
       </div>
     </form>
   );
@@ -608,7 +683,7 @@ function UnitCard({
   showResourceForm: boolean;
 }) {
   return (
-    <article className="rounded-lg border bg-background p-4">
+    <article className="rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 className="font-bold">{unit.title}</h4>
@@ -617,14 +692,16 @@ function UnitCard({
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={onEdit}>Editar</Button>
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            Editar
+          </Button>
           <Button size="sm" variant="destructive" onClick={onDelete}>
             <Trash2 className="size-4" />
           </Button>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 rounded-lg border bg-background p-3">
         <div className="flex items-center justify-between gap-3">
           <h5 className="text-sm font-semibold">Recursos</h5>
           <Button size="sm" variant="outline" onClick={onNewResource}>
@@ -636,7 +713,10 @@ function UnitCard({
         ) : (
           <div className="mt-2 divide-y rounded-md border">
             {resources.map((resource) => (
-              <div key={resource.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+              <div
+                key={resource.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-3"
+              >
                 <div className="flex items-center gap-2 text-sm">
                   <ResourceIcon type={inferResourceType(resource)} />
                   <div>
@@ -650,7 +730,11 @@ function UnitCard({
                   <Button size="sm" variant="outline" onClick={() => onEditResource(resource)}>
                     Editar
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => onDeleteResource(resource.id)}>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => onDeleteResource(resource.id)}
+                  >
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
@@ -736,7 +820,9 @@ function ResourceForm({
       <div>
         <Label>Tipo</Label>
         <Select name="type" defaultValue={resource?.type ?? "pdf"}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="pdf">PDF</SelectItem>
             <SelectItem value="image">Imagen</SelectItem>
@@ -751,7 +837,12 @@ function ResourceForm({
       </div>
       <Field label="Título" name="title" defaultValue={resource?.title ?? ""} />
       <Field label="URL, YouTube ID o enlace BBB" name="url" defaultValue={resource?.url ?? ""} />
-      <Field label="Pos." name="position" type="number" defaultValue={resource?.position ?? nextPosition} />
+      <Field
+        label="Pos."
+        name="position"
+        type="number"
+        defaultValue={resource?.position ?? nextPosition}
+      />
       <Button type="submit" className="self-end" disabled={uploading}>
         {uploading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
         Guardar
@@ -765,7 +856,8 @@ function ResourceForm({
           accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp4,.mov,.png,.jpg,.jpeg,.webp,.zip"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          Si subes un archivo, se guardará como recurso privado. Si prefieres un enlace externo, deja el archivo vacío y escribe la URL.
+          Si subes un archivo, se guardará como recurso privado. Si prefieres un enlace externo,
+          deja el archivo vacío y escribe la URL.
         </p>
       </div>
     </form>
