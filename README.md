@@ -96,7 +96,7 @@ La base incluye, entre otras, estas tablas principales:
 - `user_roles`
 - `courses`
 - `course_bundles`
-- `topics`
+- `topics` (contenedor tecnico interno para compatibilidad; la interfaz trabaja como curso -> unidades -> recursos)
 - `units`
 - `resources`
 - `enrollments`
@@ -122,7 +122,7 @@ Las pantallas admin actuales son:
 
 - `/admin/users`: usuarios, estado, bloqueo.
 - `/admin/enrollments`: matriculas manuales por curso.
-- `/admin/content`: cursos, temas, unidades y recursos.
+- `/admin/content`: bloques/cursos, unidades y recursos.
 - `/admin/videoconferences`: videoconferencias por curso.
 - `/admin/roulette`: slots, pesos y payloads de premios.
 - `/admin/analytics`: actividad, progreso, matriculas, estrellas y giros.
