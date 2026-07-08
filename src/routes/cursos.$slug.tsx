@@ -20,7 +20,7 @@ import {
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
-import { getResourceAccessUrl } from "@/lib/resource-access.functions";
+import { getResourceAccessUrl, listUnitResources } from "@/lib/resource-access.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/cursos/$slug")({
@@ -269,18 +269,12 @@ function UnitRow({
 }) {
   const qc = useQueryClient();
   const award = useServerFn(awardStar);
+  const loadResources = useServerFn(listUnitResources);
   const [open, setOpen] = useState(defaultOpen && unlocked);
-  const { data: resources } = useQuery({
+  const { data: resources, error: resourcesError } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("resources")
-        .select("*")
-        .eq("unit_id", unit.id)
-        .order("position");
-      return data ?? [];
-    },
+    queryFn: () => loadResources({ data: { unitId: unit.id } }),
   });
 
   const completed = !!progress?.completed;
@@ -359,6 +353,10 @@ function UnitRow({
             <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
             {resources === undefined ? (
               <p className="text-sm text-muted-foreground">Cargando materiales...</p>
+            ) : resourcesError ? (
+              <p className="text-sm text-destructive">
+                No se pudieron cargar los recursos de esta unidad.
+              </p>
             ) : resources.length > 0 ? (
               resources.map((r) => <ResourceLink key={r.id} resource={r} />)
             ) : (
