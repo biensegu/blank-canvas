@@ -6,7 +6,7 @@ import { z } from "zod";
 const AwardInput = z.object({
   reason: z.enum(["unit", "video", "quiz", "vc", "resource"]),
   ref: z.string().min(1).max(120),
-  amount: z.number().int().min(1).max(10).default(1),
+  amount: z.number().int().min(1).max(1000).default(1),
 });
 
 export const awardStar = createServerFn({ method: "POST" })

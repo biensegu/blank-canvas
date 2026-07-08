@@ -273,18 +273,52 @@ function UnitRow({
   const [open, setOpen] = useState(defaultOpen && unlocked);
   const [savingProgress, setSavingProgress] = useState(false);
   const [locallyCompleted, setLocallyCompleted] = useState(false);
+  const [locallyAwarded, setLocallyAwarded] = useState(false);
+  const unitStars = Math.max(0, Math.min(1000, Number(unit.base_points ?? 1)));
   const { data: resources, error: resourcesError } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
     queryFn: () => loadResources({ data: { unitId: unit.id } }),
   });
+  const { data: starAward } = useQuery({
+    queryKey: ["unit-star-award", unit.id, userId],
+    enabled: unlocked,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("star_awards")
+        .select("amount")
+        .eq("reason", "unit")
+        .eq("ref_id", unit.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const completed = !!progress?.completed;
   const isCompleted = completed || locallyCompleted;
+  const hasStarAward = !!starAward || locallyAwarded || unitStars === 0;
 
   useEffect(() => {
     setLocallyCompleted(completed);
   }, [completed]);
+
+  useEffect(() => {
+    setLocallyAwarded(!!starAward);
+  }, [starAward]);
+
+  async function awardUnitStars() {
+    if (unitStars <= 0) return false;
+    const result = await award({
+      data: { reason: "unit", ref: unit.id, amount: unitStars },
+    });
+    if (result.awarded) {
+      setLocallyAwarded(true);
+      qc.invalidateQueries({ queryKey: ["unit-star-award", unit.id, userId] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    }
+    return result.awarded;
+  }
 
   async function completeUnit() {
     if (savingProgress || isCompleted) return;
@@ -302,13 +336,33 @@ function UnitRow({
       );
       if (error) throw error;
 
-      await award({ data: { reason: "unit", ref: unit.id } });
+      const awarded = await awardUnitStars();
       setLocallyCompleted(true);
-      toast.success("Unidad marcada como completada");
-      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success(
+        awarded
+          ? `Unidad completada. Has ganado ${unitStars} estrella${unitStars === 1 ? "" : "s"}.`
+          : "Unidad marcada como completada",
+      );
       qc.invalidateQueries({ queryKey: ["course-progress"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo completar la unidad");
+    } finally {
+      setSavingProgress(false);
+    }
+  }
+
+  async function claimMissingStars() {
+    if (savingProgress || !isCompleted || hasStarAward) return;
+    setSavingProgress(true);
+    try {
+      const awarded = await awardUnitStars();
+      toast.success(
+        awarded
+          ? `Has ganado ${unitStars} estrella${unitStars === 1 ? "" : "s"}.`
+          : "Las estrellas de esta unidad ya estaban registradas.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron sumar las estrellas");
     } finally {
       setSavingProgress(false);
     }
@@ -409,8 +463,12 @@ function UnitRow({
               </p>
               <p className="text-xs text-muted-foreground">
                 {isCompleted
-                  ? "Tu progreso ya está guardado. Puedes revertirlo si lo marcaste por error."
-                  : "Marca la unidad cuando hayas revisado sus materiales."}
+                  ? hasStarAward
+                    ? "Tu progreso y tus estrellas ya están guardados."
+                    : "Tu progreso está guardado, pero aún puedes reclamar las estrellas de esta unidad."
+                  : `Marca la unidad cuando hayas revisado sus materiales para ganar ${unitStars} estrella${
+                      unitStars === 1 ? "" : "s"
+                    }.`}
               </p>
             </div>
             {isCompleted ? (
@@ -419,6 +477,19 @@ function UnitRow({
                   <CheckCircle2 className="size-4" />
                   Completada
                 </span>
+                {!hasStarAward && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={claimMissingStars}
+                    disabled={savingProgress}
+                  >
+                    {savingProgress
+                      ? "Guardando..."
+                      : `Sumar ${unitStars} estrella${unitStars === 1 ? "" : "s"}`}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="sm"
