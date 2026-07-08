@@ -17,7 +17,7 @@ import {
   Play,
   Video,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { enrollCourse, awardStar } from "@/lib/gamification.functions";
 import { getResourceAccessUrl, listUnitResources } from "@/lib/resource-access.functions";
@@ -271,6 +271,8 @@ function UnitRow({
   const award = useServerFn(awardStar);
   const loadResources = useServerFn(listUnitResources);
   const [open, setOpen] = useState(defaultOpen && unlocked);
+  const [completing, setCompleting] = useState(false);
+  const [locallyCompleted, setLocallyCompleted] = useState(false);
   const { data: resources, error: resourcesError } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
@@ -278,22 +280,38 @@ function UnitRow({
   });
 
   const completed = !!progress?.completed;
+  const isCompleted = completed || locallyCompleted;
+
+  useEffect(() => {
+    setLocallyCompleted(completed);
+  }, [completed]);
+
   async function completeUnit() {
-    await supabase.from("unit_progress").upsert(
-      {
-        user_id: userId,
-        unit_id: unit.id,
-        video_percent: 100,
-        completed: true,
-        completed_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,unit_id" } as any,
-    );
-    if (!completed) {
+    if (completing || isCompleted) return;
+    setCompleting(true);
+    try {
+      const { error } = await supabase.from("unit_progress").upsert(
+        {
+          user_id: userId,
+          unit_id: unit.id,
+          video_percent: 100,
+          completed: true,
+          completed_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,unit_id" } as any,
+      );
+      if (error) throw error;
+
       await award({ data: { reason: "unit", ref: unit.id } });
+      setLocallyCompleted(true);
+      toast.success("Unidad marcada como completada");
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["course-progress"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo completar la unidad");
+    } finally {
+      setCompleting(false);
     }
-    qc.invalidateQueries({ queryKey: ["course-progress"] });
   }
 
   return (
@@ -318,7 +336,7 @@ function UnitRow({
         <div className="flex items-center gap-3 p-2">
           {!unlocked ? (
             <Lock className="size-4 text-muted-foreground" />
-          ) : completed ? (
+          ) : isCompleted ? (
             <CheckCircle2 className="size-5 text-[var(--success)]" />
           ) : (
             <Play className="size-4 text-primary" />
@@ -332,6 +350,15 @@ function UnitRow({
         </div>
         {unlocked && (
           <div className="flex items-center gap-3">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                isCompleted
+                  ? "bg-[var(--success)]/10 text-[var(--success)]"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {isCompleted ? "Completada" : "Pendiente"}
+            </span>
             <Button
               type="button"
               size="sm"
@@ -349,6 +376,33 @@ function UnitRow({
       </div>
       {open && unlocked && (
         <div className="mt-4 space-y-4 rounded-xl border bg-background p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
+            <div>
+              <p className="text-sm font-semibold">
+                {isCompleted ? "Unidad completada" : "Completar unidad"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isCompleted
+                  ? "Tu progreso ya está guardado."
+                  : "Marca la unidad cuando hayas revisado sus materiales."}
+              </p>
+            </div>
+            {isCompleted ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success)]/10 px-3 py-1 text-xs font-semibold text-[var(--success)]">
+                <CheckCircle2 className="size-4" />
+                Completada
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                className="rounded-full"
+                onClick={completeUnit}
+                disabled={completing}
+              >
+                {completing ? "Guardando..." : "Marcar como completada"}
+              </Button>
+            )}
+          </div>
           <div className="space-y-2">
             <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
             {resources === undefined ? (
@@ -365,11 +419,6 @@ function UnitRow({
               </p>
             )}
           </div>
-          {!completed && (
-            <Button size="sm" className="rounded-full" onClick={completeUnit}>
-              Marcar unidad como completada
-            </Button>
-          )}
         </div>
       )}
     </div>
