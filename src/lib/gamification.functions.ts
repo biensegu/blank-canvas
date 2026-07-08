@@ -9,19 +9,44 @@ const AwardInput = z.object({
   amount: z.number().int().min(1).max(1000).default(1),
 });
 
+async function awardStarsDedup(userId: string, reason: string, ref: string, amount: number) {
+  const { error: awardError } = await supabaseAdmin.from("star_awards").insert({
+    user_id: userId,
+    reason,
+    ref_id: ref,
+    amount,
+  });
+
+  if (awardError) {
+    if (awardError.code === "23505" || awardError.message.includes("duplicate")) {
+      return false;
+    }
+    throw new Error(awardError.message);
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("stars")
+    .eq("id", userId)
+    .single();
+  if (profileError) throw new Error(profileError.message);
+
+  const { error: updateError } = await supabaseAdmin
+    .from("profiles")
+    .update({ stars: (profile.stars ?? 0) + amount, updated_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (updateError) throw new Error(updateError.message);
+
+  return true;
+}
+
 export const awardStar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => AwardInput.parse(d))
   .handler(async ({ data, context }) => {
     const { userId } = context;
-    const { data: ok, error } = await supabaseAdmin.rpc("award_star_dedup", {
-      _user: userId,
-      _reason: data.reason,
-      _ref: data.ref,
-      _amount: data.amount,
-    });
-    if (error) throw new Error(error.message);
-    return { awarded: !!ok };
+    const awarded = await awardStarsDedup(userId, data.reason, data.ref, data.amount);
+    return { awarded };
   });
 
 export const spinRoulette = createServerFn({ method: "POST" })
@@ -76,11 +101,6 @@ export const claimTopicBonus = createServerFn({ method: "POST" })
       .from("unit_progress").select("unit_id")
       .eq("user_id", userId).eq("completed", true).in("unit_id", unitIds);
     if ((done?.length ?? 0) < unitIds.length) return { awarded: false };
-    const { data: ok } = await supabaseAdmin.rpc("award_star_dedup", {
-      _user: userId,
-      _reason: "topic",
-      _ref: topic.id,
-      _amount: Math.max(1, topic.bonus_points ?? 20),
-    });
-    return { awarded: !!ok };
+    const awarded = await awardStarsDedup(userId, "topic", topic.id, Math.max(1, topic.bonus_points ?? 20));
+    return { awarded };
   });
