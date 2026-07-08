@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { awardStarsDedup } from "@/lib/gamification.functions";
 
 const ResourceAccessInput = z.object({
   resourceId: z.string().uuid(),
@@ -76,7 +77,7 @@ export const getResourceAccessUrl = createServerFn({ method: "POST" })
 
     const { data: resource, error } = await supabaseAdmin
       .from("resources")
-      .select("id, url, units(id, topics(id, course_id))")
+      .select("id, title, url, units(id, topics(id, course_id))")
       .eq("id", data.resourceId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -104,9 +105,17 @@ export const getResourceAccessUrl = createServerFn({ method: "POST" })
       throw new Error("No tienes acceso a este recurso.");
     }
 
+    await supabaseAdmin.from("activity_events").insert({
+      user_id: context.userId,
+      course_id: courseId,
+      type: "resource_opened",
+      metadata: { resource_id: resource.id, title: resource.title },
+    });
+    const awarded = await awardStarsDedup(context.userId, "resource", resource.id, 1);
+
     const storageRef = parseStorageUrl(resource.url);
     if (!storageRef) {
-      return { url: resource.url };
+      return { url: resource.url, awarded, stars: awarded ? 1 : 0 };
     }
 
     const { data: signed, error: signedError } = await supabaseAdmin.storage
@@ -114,5 +123,5 @@ export const getResourceAccessUrl = createServerFn({ method: "POST" })
       .createSignedUrl(storageRef.path, 60 * 10);
     if (signedError) throw new Error(signedError.message);
 
-    return { url: signed.signedUrl };
+    return { url: signed.signedUrl, awarded, stars: awarded ? 1 : 0 };
   });

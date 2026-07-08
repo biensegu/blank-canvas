@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 
 const AwardInput = z.object({
@@ -9,7 +8,15 @@ const AwardInput = z.object({
   amount: z.number().int().min(1).max(1000).default(1),
 });
 
-async function awardStarsDedup(userId: string, reason: string, ref: string, amount: number) {
+const UnitInput = z.object({ unitId: z.string().uuid() });
+
+async function getSupabaseAdmin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+
+export async function awardStarsDedup(userId: string, reason: string, ref: string, amount: number) {
+  const supabaseAdmin = await getSupabaseAdmin();
   const { error: awardError } = await supabaseAdmin.from("star_awards").insert({
     user_id: userId,
     reason,
@@ -40,6 +47,49 @@ async function awardStarsDedup(userId: string, reason: string, ref: string, amou
   return true;
 }
 
+async function requireUnitAccess(userId: string, unitId: string) {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data: unit, error } = await supabaseAdmin
+    .from("units")
+    .select("id, title, base_points, topics(id, course_id)")
+    .eq("id", unitId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!unit) throw new Error("Unidad no encontrada.");
+
+  const courseId = unit.topics?.course_id;
+  if (!courseId) throw new Error("Unidad sin curso asociado.");
+
+  const [{ data: role }, { data: enrollment }] = await Promise.all([
+    supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle(),
+    supabaseAdmin
+      .from("enrollments")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("course_id", courseId)
+      .maybeSingle(),
+  ]);
+
+  if (!role && !enrollment) {
+    throw new Error("No tienes acceso a esta unidad.");
+  }
+
+  return { unit, courseId };
+}
+
+async function awardUnitStars(userId: string, unitId: string) {
+  const { unit } = await requireUnitAccess(userId, unitId);
+  const amount = Math.max(0, Math.min(1000, unit.base_points ?? 0));
+  if (amount <= 0) return { awarded: false, amount: 0 };
+  const awarded = await awardStarsDedup(userId, "unit", unit.id, amount);
+  return { awarded, amount };
+}
+
 export const awardStar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => AwardInput.parse(d))
@@ -47,6 +97,66 @@ export const awardStar = createServerFn({ method: "POST" })
     const { userId } = context;
     const awarded = await awardStarsDedup(userId, data.reason, data.ref, data.amount);
     return { awarded };
+  });
+
+export const completeUnitTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => UnitInput.parse(data))
+  .handler(async ({ data, context }) => {
+    await requireUnitAccess(context.userId, data.unitId);
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin.from("unit_progress").upsert(
+      {
+        user_id: context.userId,
+        unit_id: data.unitId,
+        video_percent: 100,
+        completed: true,
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,unit_id" },
+    );
+    if (error) throw new Error(error.message);
+
+    const award = await awardUnitStars(context.userId, data.unitId);
+    return { completed: true, ...award };
+  });
+
+export const reopenUnitTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => UnitInput.parse(data))
+  .handler(async ({ data, context }) => {
+    await requireUnitAccess(context.userId, data.unitId);
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error } = await supabaseAdmin.from("unit_progress").upsert(
+      {
+        user_id: context.userId,
+        unit_id: data.unitId,
+        video_percent: 0,
+        completed: false,
+        completed_at: null,
+      },
+      { onConflict: "user_id,unit_id" },
+    );
+    if (error) throw new Error(error.message);
+    return { completed: false };
+  });
+
+export const claimUnitStars = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => UnitInput.parse(data))
+  .handler(async ({ data, context }) => {
+    await requireUnitAccess(context.userId, data.unitId);
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { data: progress, error } = await supabaseAdmin
+      .from("unit_progress")
+      .select("completed")
+      .eq("user_id", context.userId)
+      .eq("unit_id", data.unitId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!progress?.completed) throw new Error("Completa la unidad antes de reclamar estrellas.");
+
+    return awardUnitStars(context.userId, data.unitId);
   });
 
 export const spinRoulette = createServerFn({ method: "POST" })
@@ -70,6 +180,7 @@ export const enrollCourse = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => EnrollInput.parse(d))
   .handler(async ({ data, context }) => {
     const { userId, supabase } = context;
+    const supabaseAdmin = await getSupabaseAdmin();
     const { data: course } = await supabase
       .from("courses").select("price_cents").eq("id", data.courseId).maybeSingle();
     if (!course) throw new Error("Course not found");
@@ -89,6 +200,7 @@ export const claimTopicBonus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TopicInput.parse(d))
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    const supabaseAdmin = await getSupabaseAdmin();
     // Fetch units of the topic and the bonus
     const { data: topic } = await supabaseAdmin
       .from("topics").select("id, bonus_points").eq("id", data.topicId).maybeSingle();
