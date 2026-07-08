@@ -19,7 +19,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { enrollCourse, awardStar } from "@/lib/gamification.functions";
+import {
+  claimUnitStars,
+  completeUnitTask,
+  enrollCourse,
+  reopenUnitTask,
+} from "@/lib/gamification.functions";
 import { getResourceAccessUrl, listUnitResources } from "@/lib/resource-access.functions";
 import { toast } from "sonner";
 
@@ -268,81 +273,73 @@ function UnitRow({
   defaultOpen: boolean;
 }) {
   const qc = useQueryClient();
-  const award = useServerFn(awardStar);
+  const completeUnitOnServer = useServerFn(completeUnitTask);
+  const reopenUnitOnServer = useServerFn(reopenUnitTask);
+  const claimUnitStarsOnServer = useServerFn(claimUnitStars);
   const loadResources = useServerFn(listUnitResources);
   const [open, setOpen] = useState(defaultOpen && unlocked);
   const [savingProgress, setSavingProgress] = useState(false);
   const [locallyCompleted, setLocallyCompleted] = useState(false);
-  const [locallyAwarded, setLocallyAwarded] = useState(false);
+  const [locallyAwardedRefs, setLocallyAwardedRefs] = useState<Set<string>>(() => new Set());
   const unitStars = Math.max(0, Math.min(1000, Number(unit.base_points ?? 1)));
   const { data: resources, error: resourcesError } = useQuery({
     queryKey: ["resources", unit.id],
     enabled: open,
     queryFn: () => loadResources({ data: { unitId: unit.id } }),
   });
-  const { data: starAward } = useQuery({
-    queryKey: ["unit-star-award", unit.id, userId],
+  const { data: starAwards } = useQuery({
+    queryKey: ["unit-star-awards", unit.id, userId],
     enabled: unlocked,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("star_awards")
-        .select("amount")
-        .eq("reason", "unit")
-        .eq("ref_id", unit.id)
-        .maybeSingle();
+        .select("reason, ref_id, amount")
+        .in("reason", ["unit", "resource"]);
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
   const completed = !!progress?.completed;
   const isCompleted = completed || locallyCompleted;
-  const hasStarAward = !!starAward || locallyAwarded || unitStars === 0;
+  const awardRefs = useMemo(() => {
+    const refs = new Set((starAwards ?? []).map((award) => `${award.reason}:${award.ref_id}`));
+    for (const ref of locallyAwardedRefs) refs.add(ref);
+    return refs;
+  }, [starAwards, locallyAwardedRefs]);
+  const hasStarAward = unitStars === 0 || awardRefs.has(`unit:${unit.id}`);
+  const resourceCount = resources?.length ?? 0;
+  const openedResourceCount =
+    resources?.filter((resource) => awardRefs.has(`resource:${resource.id}`)).length ?? 0;
 
   useEffect(() => {
     setLocallyCompleted(completed);
   }, [completed]);
 
-  useEffect(() => {
-    setLocallyAwarded(!!starAward);
-  }, [starAward]);
-
-  async function awardUnitStars() {
-    if (unitStars <= 0) return false;
-    const result = await award({
-      data: { reason: "unit", ref: unit.id, amount: unitStars },
+  function markAwarded(reason: string, refId: string) {
+    setLocallyAwardedRefs((current) => {
+      const next = new Set(current);
+      next.add(`${reason}:${refId}`);
+      return next;
     });
-    if (result.awarded) {
-      setLocallyAwarded(true);
-      qc.invalidateQueries({ queryKey: ["unit-star-award", unit.id, userId] });
-      qc.invalidateQueries({ queryKey: ["profile"] });
-    }
-    return result.awarded;
   }
 
   async function completeUnit() {
     if (savingProgress || isCompleted) return;
     setSavingProgress(true);
     try {
-      const { error } = await supabase.from("unit_progress").upsert(
-        {
-          user_id: userId,
-          unit_id: unit.id,
-          video_percent: 100,
-          completed: true,
-          completed_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,unit_id" } as any,
-      );
-      if (error) throw error;
-
-      const awarded = await awardUnitStars();
+      const result = await completeUnitOnServer({ data: { unitId: unit.id } });
+      if (result.awarded) markAwarded("unit", unit.id);
       setLocallyCompleted(true);
       toast.success(
-        awarded
-          ? `Unidad completada. Has ganado ${unitStars} estrella${unitStars === 1 ? "" : "s"}.`
+        result.awarded
+          ? `Unidad completada. Has ganado ${result.amount} estrella${
+              result.amount === 1 ? "" : "s"
+            }.`
           : "Unidad marcada como completada",
       );
+      qc.invalidateQueries({ queryKey: ["unit-star-awards", unit.id, userId] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["course-progress"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo completar la unidad");
@@ -355,12 +352,15 @@ function UnitRow({
     if (savingProgress || !isCompleted || hasStarAward) return;
     setSavingProgress(true);
     try {
-      const awarded = await awardUnitStars();
+      const result = await claimUnitStarsOnServer({ data: { unitId: unit.id } });
+      if (result.awarded) markAwarded("unit", unit.id);
       toast.success(
-        awarded
-          ? `Has ganado ${unitStars} estrella${unitStars === 1 ? "" : "s"}.`
+        result.awarded
+          ? `Has ganado ${result.amount} estrella${result.amount === 1 ? "" : "s"}.`
           : "Las estrellas de esta unidad ya estaban registradas.",
       );
+      qc.invalidateQueries({ queryKey: ["unit-star-awards", unit.id, userId] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudieron sumar las estrellas");
     } finally {
@@ -372,18 +372,7 @@ function UnitRow({
     if (savingProgress || !isCompleted) return;
     setSavingProgress(true);
     try {
-      const { error } = await supabase.from("unit_progress").upsert(
-        {
-          user_id: userId,
-          unit_id: unit.id,
-          video_percent: 0,
-          completed: false,
-          completed_at: null,
-        },
-        { onConflict: "user_id,unit_id" } as any,
-      );
-      if (error) throw error;
-
+      await reopenUnitOnServer({ data: { unitId: unit.id } });
       setLocallyCompleted(false);
       toast.success("Unidad marcada como pendiente");
       qc.invalidateQueries({ queryKey: ["course-progress"] });
@@ -512,6 +501,23 @@ function UnitRow({
               </Button>
             )}
           </div>
+          <div className="grid gap-2 rounded-lg border bg-card/60 p-3 text-sm sm:grid-cols-3">
+            <TaskStatus
+              done={isCompleted}
+              label="Unidad completada"
+              detail={`${unitStars} estrella${unitStars === 1 ? "" : "s"}`}
+            />
+            <TaskStatus
+              done={hasStarAward}
+              label="Estrellas de unidad"
+              detail={hasStarAward ? "Registradas" : "Pendientes"}
+            />
+            <TaskStatus
+              done={resourceCount > 0 && openedResourceCount === resourceCount}
+              label="Recursos abiertos"
+              detail={`${openedResourceCount}/${resourceCount}`}
+            />
+          </div>
           <div className="space-y-2">
             <h4 className="text-xs uppercase tracking-wide text-muted-foreground">Recursos</h4>
             {resources === undefined ? (
@@ -521,7 +527,17 @@ function UnitRow({
                 No se pudieron cargar los recursos de esta unidad.
               </p>
             ) : resources.length > 0 ? (
-              resources.map((r) => <ResourceLink key={r.id} resource={r} />)
+              resources.map((r) => (
+                <ResourceLink
+                  key={r.id}
+                  resource={r}
+                  awarded={awardRefs.has(`resource:${r.id}`)}
+                  onAwarded={() => {
+                    markAwarded("resource", r.id);
+                    qc.invalidateQueries({ queryKey: ["unit-star-awards", unit.id, userId] });
+                  }}
+                />
+              ))
             ) : (
               <p className="text-sm text-muted-foreground">
                 Esta unidad todavía no tiene materiales subidos.
@@ -534,8 +550,41 @@ function UnitRow({
   );
 }
 
-function ResourceLink({ resource }: { resource: any }) {
+function TaskStatus({
+  done,
+  label,
+  detail,
+}: {
+  done: boolean;
+  label: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-background px-3 py-2">
+      {done ? (
+        <CheckCircle2 className="size-4 text-[var(--success)]" />
+      ) : (
+        <Lock className="size-4 text-muted-foreground" />
+      )}
+      <div>
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function ResourceLink({
+  resource,
+  awarded,
+  onAwarded,
+}: {
+  resource: any;
+  awarded: boolean;
+  onAwarded: () => void;
+}) {
   const getAccessUrl = useServerFn(getResourceAccessUrl);
+  const qc = useQueryClient();
   const [opening, setOpening] = useState(false);
   const type = inferResourceType(resource);
   const youtubeId = type === "video" ? parseYouTubeId(resource.url) : null;
@@ -544,11 +593,15 @@ function ResourceLink({ resource }: { resource: any }) {
     const target = window.open("about:blank", "_blank");
     setOpening(true);
     try {
-      const { url } = youtubeId
-        ? { url: `https://www.youtube.com/watch?v=${youtubeId}` }
-        : await getAccessUrl({ data: { resourceId: resource.id } });
+      const result = await getAccessUrl({ data: { resourceId: resource.id } });
+      const url = youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : result.url;
       if (target) target.location.href = url;
       else window.location.href = url;
+      if (result.awarded) {
+        onAwarded();
+        qc.invalidateQueries({ queryKey: ["profile"] });
+        toast.success(`Recurso abierto. Has ganado ${result.stars} estrella.`);
+      }
     } catch (error) {
       target?.close();
       toast.error(error instanceof Error ? error.message : "No se pudo abrir el recurso");
@@ -564,7 +617,9 @@ function ResourceLink({ resource }: { resource: any }) {
           <ResourceIcon type={type} />
           <div>
             <div className="font-medium">{resource.title}</div>
-            <div className="text-xs text-muted-foreground">{resourceTypeLabel(type)}</div>
+            <div className="text-xs text-muted-foreground">
+              {resourceTypeLabel(type)} · {awarded ? "estrella conseguida" : "1 estrella al abrir"}
+            </div>
           </div>
         </div>
         <Button
