@@ -7,11 +7,66 @@ const ResourceAccessInput = z.object({
   resourceId: z.string().uuid(),
 });
 
+const UnitResourcesInput = z.object({
+  unitId: z.string().uuid(),
+});
+
 function parseStorageUrl(url: string) {
   const match = url.match(/^storage:\/\/([^/]+)\/(.+)$/);
   if (!match) return null;
   return { bucket: match[1], path: match[2] };
 }
+
+async function assertUnitAccess(supabaseAdmin: any, userId: string, unitId: string) {
+  const { data: unit, error } = await supabaseAdmin
+    .from("units")
+    .select("id, topics(id, course_id)")
+    .eq("id", unitId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!unit) throw new Error("Unidad no encontrada.");
+
+  const courseId = unit.topics?.course_id;
+  if (!courseId) throw new Error("Unidad sin curso asociado.");
+
+  const [{ data: role }, { data: enrollment }] = await Promise.all([
+    supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle(),
+    supabaseAdmin
+      .from("enrollments")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("course_id", courseId)
+      .maybeSingle(),
+  ]);
+
+  if (!role && !enrollment) {
+    throw new Error("No tienes acceso a esta unidad.");
+  }
+
+  return { courseId };
+}
+
+export const listUnitResources = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => UnitResourcesInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertUnitAccess(supabaseAdmin, context.userId, data.unitId);
+
+    const { data: resources, error } = await supabaseAdmin
+      .from("resources")
+      .select("id, unit_id, type, title, url, position")
+      .eq("unit_id", data.unitId)
+      .order("position");
+    if (error) throw new Error(error.message);
+
+    return resources ?? [];
+  });
 
 export const getResourceAccessUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
