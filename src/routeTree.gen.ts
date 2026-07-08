@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CursosRouteImport } from './routes/cursos'
@@ -24,6 +25,11 @@ import { Route as AdminContentRouteImport } from './routes/admin.content'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as ApiAdminResourceUploadRouteImport } from './routes/api/admin/resource-upload'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/cursos': typeof CursosRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/enrollments': typeof AdminEnrollmentsRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/reset-password'
     | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/reset-password'
     | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/cursos'
     | '/dashboard'
     | '/login'
+    | '/reset-password'
     | '/admin/analytics'
     | '/admin/content'
     | '/admin/enrollments'
@@ -201,12 +213,20 @@ export interface RootRouteChildren {
   CursosRoute: typeof CursosRouteWithChildren
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPiezinRoute: typeof ApiPiezinRoute
   ApiAdminResourceUploadRoute: typeof ApiAdminResourceUploadRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -345,6 +365,7 @@ const rootRouteChildren: RootRouteChildren = {
   CursosRoute: CursosRouteWithChildren,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ApiPiezinRoute: ApiPiezinRoute,
   ApiAdminResourceUploadRoute: ApiAdminResourceUploadRoute,
 }
