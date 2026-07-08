@@ -271,7 +271,7 @@ function UnitRow({
   const award = useServerFn(awardStar);
   const loadResources = useServerFn(listUnitResources);
   const [open, setOpen] = useState(defaultOpen && unlocked);
-  const [completing, setCompleting] = useState(false);
+  const [savingProgress, setSavingProgress] = useState(false);
   const [locallyCompleted, setLocallyCompleted] = useState(false);
   const { data: resources, error: resourcesError } = useQuery({
     queryKey: ["resources", unit.id],
@@ -287,8 +287,8 @@ function UnitRow({
   }, [completed]);
 
   async function completeUnit() {
-    if (completing || isCompleted) return;
-    setCompleting(true);
+    if (savingProgress || isCompleted) return;
+    setSavingProgress(true);
     try {
       const { error } = await supabase.from("unit_progress").upsert(
         {
@@ -310,7 +310,33 @@ function UnitRow({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo completar la unidad");
     } finally {
-      setCompleting(false);
+      setSavingProgress(false);
+    }
+  }
+
+  async function reopenUnitProgress() {
+    if (savingProgress || !isCompleted) return;
+    setSavingProgress(true);
+    try {
+      const { error } = await supabase.from("unit_progress").upsert(
+        {
+          user_id: userId,
+          unit_id: unit.id,
+          video_percent: 0,
+          completed: false,
+          completed_at: null,
+        },
+        { onConflict: "user_id,unit_id" } as any,
+      );
+      if (error) throw error;
+
+      setLocallyCompleted(false);
+      toast.success("Unidad marcada como pendiente");
+      qc.invalidateQueries({ queryKey: ["course-progress"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo revertir la unidad");
+    } finally {
+      setSavingProgress(false);
     }
   }
 
@@ -383,23 +409,35 @@ function UnitRow({
               </p>
               <p className="text-xs text-muted-foreground">
                 {isCompleted
-                  ? "Tu progreso ya está guardado."
+                  ? "Tu progreso ya está guardado. Puedes revertirlo si lo marcaste por error."
                   : "Marca la unidad cuando hayas revisado sus materiales."}
               </p>
             </div>
             {isCompleted ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success)]/10 px-3 py-1 text-xs font-semibold text-[var(--success)]">
-                <CheckCircle2 className="size-4" />
-                Completada
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--success)]/10 px-3 py-1 text-xs font-semibold text-[var(--success)]">
+                  <CheckCircle2 className="size-4" />
+                  Completada
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={reopenUnitProgress}
+                  disabled={savingProgress}
+                >
+                  {savingProgress ? "Guardando..." : "Marcar como pendiente"}
+                </Button>
+              </div>
             ) : (
               <Button
                 size="sm"
                 className="rounded-full"
                 onClick={completeUnit}
-                disabled={completing}
+                disabled={savingProgress}
               >
-                {completing ? "Guardando..." : "Marcar como completada"}
+                {savingProgress ? "Guardando..." : "Marcar como completada"}
               </Button>
             )}
           </div>
